@@ -1,0 +1,69 @@
+"use client"
+
+import * as React from "react"
+
+import {
+  DEFAULT_UI_PREFERENCES,
+  UI_PREFERENCES_STORAGE_KEY,
+  type AccentColor,
+  type NavigationPosition,
+  type UiPreferences,
+} from "@/lib/ui-preferences"
+
+interface UiPreferencesContextValue extends UiPreferences {
+  setNavigationPosition: (position: NavigationPosition) => void
+  setAccentColor: (color: AccentColor) => void
+}
+
+const UiPreferencesContext = React.createContext<UiPreferencesContextValue | null>(null)
+
+function applyPreferences(preferences: UiPreferences) {
+  document.documentElement.dataset.navigation = preferences.navigationPosition
+  document.documentElement.dataset.accent = preferences.accentColor
+}
+
+function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
+  const [preferences, setPreferences] = React.useState<UiPreferences>(() => {
+    if (typeof document === "undefined") return DEFAULT_UI_PREFERENCES
+
+    const root = document.documentElement
+    const navigationPosition = root.dataset.navigation as NavigationPosition | undefined
+    const accentColor = root.dataset.accent as AccentColor | undefined
+
+    return {
+      navigationPosition: navigationPosition ?? DEFAULT_UI_PREFERENCES.navigationPosition,
+      accentColor: accentColor ?? DEFAULT_UI_PREFERENCES.accentColor,
+    }
+  })
+
+  function updatePreferences(next: UiPreferences) {
+    setPreferences(next)
+    applyPreferences(next)
+    window.localStorage.setItem(UI_PREFERENCES_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  const value = React.useMemo<UiPreferencesContextValue>(() => ({
+    ...preferences,
+    setNavigationPosition: (navigationPosition) =>
+      updatePreferences({ ...preferences, navigationPosition }),
+    setAccentColor: (accentColor) =>
+      updatePreferences({ ...preferences, accentColor }),
+  }), [preferences])
+
+  return (
+    <UiPreferencesContext.Provider value={value}>
+      {children}
+    </UiPreferencesContext.Provider>
+  )
+}
+
+function useUiPreferences() {
+  const context = React.useContext(UiPreferencesContext)
+  if (!context) throw new Error("useUiPreferences must be used within UiPreferencesProvider")
+  return context
+}
+
+export {
+  UiPreferencesProvider,
+  useUiPreferences,
+}

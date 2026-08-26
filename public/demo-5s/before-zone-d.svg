@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <rect width="1200" height="900" fill="#dbe3ea"/>
+  <rect x="55" y="70" width="1090" height="760" rx="18" fill="#eef2f5" stroke="#9aa8b5" stroke-width="5"/>
+  <path d="M120 705h960M180 195v510M1020 195v510" stroke="#e3a008" stroke-width="18" stroke-linecap="round"/>
+  <rect x="165" y="455" width="260" height="210" rx="8" fill="#9a5b20"/>
+  <path d="M165 505h260M295 455v210" stroke="#c98a44" stroke-width="7"/>
+  <rect x="455" y="390" width="300" height="275" rx="8" fill="#83451f"/>
+  <path d="M455 465h300M605 390v275" stroke="#b76d35" stroke-width="7"/>
+  <rect x="790" y="485" width="235" height="180" rx="8" fill="#a66125"/>
+  <path d="M790 530h235M905 485v180" stroke="#d18a43" stroke-width="7"/>
+  <path d="M135 735h930" stroke="#dc2626" stroke-width="15" stroke-linecap="round"/>
+  <rect x="105" y="105" width="330" height="64" rx="10" fill="#fff" fill-opacity=".9"/>
+  <text x="135" y="146" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#7f1d1d">BEFORE · ZONE D</text>
+</svg>

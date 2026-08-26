@@ -1,0 +1,102 @@
+"use client"
+
+import * as React from "react"
+import Link from "next/link"
+import { Check, LogOut, Palette, Users } from "lucide-react"
+
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { PreferencesDialog } from "@/components/preferences/preferences-dialog"
+import { DEMO_USERS, setDemoRole, useCurrentUser } from "@/lib/current-user"
+
+/** Avatar dropdown: My Profile, Settings, Logout — per the Component Library spec. */
+function UserMenu() {
+  const [preferencesOpen, setPreferencesOpen] = React.useState(false)
+  const currentUser = useCurrentUser()
+
+  return (
+    <>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            aria-label="Account menu"
+          />
+        }
+      >
+        <Avatar>
+          <AvatarFallback>{currentUser.initials}</AvatarFallback>
+        </Avatar>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {/* Informational header, not an interactive group — plain markup,
+            not DropdownMenuLabel (Base UI's Menu.GroupLabel requires a
+            Menu.Group ancestor). */}
+        <div className="flex flex-col gap-0.5 px-2 py-1.5">
+          <span className="text-sm font-medium text-foreground">
+            {currentUser.name}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {currentUser.role}
+          </span>
+        </div>
+        <DropdownMenuSeparator />
+        <div className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Demo role
+        </div>
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => setDemoRole("auditor")}>
+            <Users />
+            <span className="min-w-0 flex-1">
+              <span className="block">{DEMO_USERS.auditor.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">Auditor</span>
+            </span>
+            {currentUser.id === DEMO_USERS.auditor.id && <Check className="text-primary" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDemoRole("leader")}>
+            <Users />
+            <span className="min-w-0 flex-1"><span className="block">{DEMO_USERS.leader.name}</span><span className="block truncate text-xs text-muted-foreground">Zone B Leader</span></span>
+            {currentUser.id === DEMO_USERS.leader.id && <Check className="text-primary" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setDemoRole("responsible")}>
+            <Users />
+            <span className="min-w-0 flex-1">
+              <span className="block">{DEMO_USERS.responsible.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">Zone B Member</span>
+            </span>
+            {currentUser.id === DEMO_USERS.responsible.id && <Check className="text-primary" />}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem render={<Link href="/profile" />}>
+            <Users />
+            My Profile
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setPreferencesOpen(true)}>
+            <Palette />
+            Appearance
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive">
+          <LogOut />
+          Log out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <PreferencesDialog open={preferencesOpen} onOpenChange={setPreferencesOpen} />
+    </>
+  )
+}
+
+export { UserMenu }
