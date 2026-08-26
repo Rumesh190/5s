@@ -1305,10 +1305,10 @@ function FiveSAuditExecution({
 
   if (showReview) {
     return (
-      <div className="flex min-h-[calc(100vh-7rem)] flex-col">
-        <div className="sticky top-0 z-30 border-b bg-background/95 px-6 py-3 backdrop-blur lg:px-8">
+      <div className="flex min-w-0 flex-col md:min-h-[calc(100dvh-7rem)]">
+        <div className="sticky top-14 z-30 min-w-0 border-b bg-background/95 px-0 py-3 backdrop-blur md:top-0 md:px-6 lg:px-8">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <Button
                 type="button"
                 variant="ghost"
@@ -1322,7 +1322,7 @@ function FiveSAuditExecution({
                 <ArrowLeft className="size-4" />
               </Button>
 
-              <div>
+              <div className="min-w-0">
                 <h1 className="text-xl font-semibold">
                   Review 5S Audit
                 </h1>
@@ -1335,7 +1335,7 @@ function FiveSAuditExecution({
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex min-w-0 flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1358,7 +1358,7 @@ function FiveSAuditExecution({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 lg:px-8">
+        <div className="min-w-0 flex-1 px-0 py-5 md:overflow-y-auto md:px-6 lg:px-8">
           <div className="mx-auto max-w-7xl space-y-5">
             <div className="grid min-w-0 gap-4 sm:grid-cols-2 2xl:grid-cols-4">
               <Card>
@@ -1633,10 +1633,10 @@ function FiveSAuditExecution({
    */
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] min-h-0 flex-col">
+    <div className="flex w-full min-w-0 max-w-full flex-col md:h-[calc(100dvh-7rem)] md:min-h-0">
       {/* FIXED HEADER */}
 
-      <div className="shrink-0 border-b bg-background px-6 pt-3 lg:px-8">
+      <div className="w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8">
         <FiveSPageHeader
           eyebrow=""
           title={`5S Audit · ${audit.title}`}
@@ -1680,7 +1680,7 @@ function FiveSAuditExecution({
 
           {/* SECTION NAVIGATION */}
 
-          <div className="flex max-w-full overflow-x-auto border-t border-border/55 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain border-t border-border/55 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {sections.map(
               (section, index) => {
                 const sectionAnswered =
@@ -1725,7 +1725,7 @@ function FiveSAuditExecution({
                       navigateToSection(index);
                     }}
                     className={[
-                      "relative flex h-14 min-w-[170px] flex-1 items-center gap-2.5 border-0 px-3 text-left transition-colors",
+                      "relative flex h-14 min-w-[148px] flex-1 items-center gap-2.5 border-0 px-3 text-left transition-colors md:min-w-[170px]",
 
                       isActive
                         ? "bg-primary/[0.035] text-primary after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
@@ -1759,15 +1759,15 @@ function FiveSAuditExecution({
 
       {/* SCROLLABLE QUESTION AREA */}
 
-      <div ref={questionScrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-4 lg:px-8">
-        <div className="mx-auto max-w-[1600px]">
+      <div ref={questionScrollRef} className="w-full min-w-0 max-w-full flex-1 px-0 py-4 md:min-h-0 md:overflow-y-auto md:px-6 lg:px-8">
+        <div className="mx-auto w-full min-w-0 max-w-[1600px]">
           {activeSection && (
             <Card className="gap-0 overflow-hidden">
               {/* REDUCED SECTION HEADER */}
 
               <CardHeader className="border-b border-border/55 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex min-w-0 items-center gap-2">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-primary/35 bg-primary/[0.035] text-xs font-semibold text-primary">
                       {String(activeSectionIndex + 1).padStart(2, "0")}
                     </div>
@@ -1779,7 +1779,7 @@ function FiveSAuditExecution({
                         }
                       </CardTitle>
 
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <p className="whitespace-normal break-words text-[11px] leading-4 text-muted-foreground">
                         {
                           activeSection.description
                         }
@@ -1787,7 +1787,7 @@ function FiveSAuditExecution({
                     </div>
                   </div>
 
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 pl-12 text-left md:pl-0 md:text-right">
                     <p className="text-xs font-semibold">Question {activeQuestionIndex + 1} of {activeSection.questions.length}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {Math.round(((activeQuestionIndex + 1) / activeSection.questions.length) * 100)}% through section
@@ -1799,7 +1799,7 @@ function FiveSAuditExecution({
                 </div>
               </CardHeader>
 
-              <CardContent className="p-5 lg:p-6">
+              <CardContent className="min-w-0 p-4 md:p-5 lg:p-6">
                 <div className="space-y-3">
                   {activeSection.questions.map(
                     (
@@ -1842,7 +1842,7 @@ function FiveSAuditExecution({
                         >
                           {/* QUESTION */}
 
-                          <div className="flex gap-3">
+                          <div className="flex min-w-0 max-w-full gap-3">
                             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                               {
                                 questionIndex +
@@ -1852,15 +1852,15 @@ function FiveSAuditExecution({
 
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                  <p className="max-w-5xl text-lg font-semibold leading-7 tracking-[-0.01em]">
+                                <div className="min-w-0 max-w-full">
+                                  <p className="max-w-5xl whitespace-normal break-words text-lg font-semibold leading-[1.35] tracking-[-0.01em] [overflow-wrap:anywhere] md:leading-7">
                                     {
                                       question.question
                                     }
                                   </p>
 
                                   {question.description && (
-                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                    <p className="mt-1 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                                       {
                                         question.description
                                       }
@@ -2005,16 +2005,16 @@ function FiveSAuditExecution({
                                     )
                                   }
                                   placeholder="Record your observation..."
-                                  className="mt-2 min-h-20"
+                                    className="mt-2 min-h-24 w-full min-w-0 max-w-full"
                                   disabled={!questionUnlocked}
                                 />
                               </div>
 
                               {/* CORRECTIVE ACTION */}
 
-                              <div className="mt-4 grid items-start gap-3">
-                              <div className="grid min-h-24 items-center gap-3 rounded-lg border border-border/75 bg-muted/20 p-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-                                <div className="flex items-center gap-2">
+                              <div className="mt-4 grid min-w-0 items-start gap-3">
+                              <div className="grid min-h-24 min-w-0 max-w-full items-center gap-3 rounded-lg border border-border/75 bg-muted/20 p-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                                <div className="flex min-w-0 items-center gap-2">
                                   <AlertCircle
                                     className={[
                                       "size-4",
@@ -2027,7 +2027,7 @@ function FiveSAuditExecution({
                                     )}
                                   />
 
-                                  <div>
+                                  <div className="min-w-0">
                                     <p className="text-xs font-medium">
                                       Action <span className="font-normal text-muted-foreground">({requiresAction ? "Required" : "Optional"})</span>
                                     </p>
@@ -2052,7 +2052,7 @@ function FiveSAuditExecution({
                                   {state.actionId ? "View Action" : "Add Action"}
                                 </Button>
 
-                                <div className="flex flex-wrap items-center gap-2 sm:justify-self-end">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-self-end">
                                   {state.actionId && (
                                     <>
                                       <Badge variant="success">
@@ -2257,19 +2257,19 @@ function FiveSAuditExecution({
                 </div>
               </CardContent>
 
-              <CardFooter className="mobile-safe-bottom grid grid-cols-2 gap-2 border-t border-border/65 bg-muted/15 px-4 py-3 sm:grid-cols-[auto_1fr_auto] sm:items-center lg:px-6">
+              <CardFooter className="mobile-safe-bottom sticky bottom-0 z-20 grid w-full min-w-0 max-w-full grid-cols-2 gap-2 border-t border-border/65 bg-background/95 px-4 py-3 backdrop-blur md:static md:grid-cols-[auto_1fr_auto] md:items-center md:bg-muted/15 md:backdrop-blur-none lg:px-6">
                 <Button
                   type="button"
                   variant="outline"
                   disabled={activeSectionIndex === 0 && activeQuestionIndex === 0}
                   onClick={handlePreviousQuestion}
-                  className="row-start-2 w-full sm:row-auto sm:w-auto"
+                  className="row-start-2 w-full md:row-auto md:w-auto"
                 >
                   <ArrowLeft className="mr-2 size-4" />
                   Previous
                 </Button>
 
-                <div className="col-span-2 row-start-1 text-center text-xs tabular-nums text-muted-foreground sm:col-span-1 sm:col-start-2">
+                <div className="col-span-2 row-start-1 text-center text-xs tabular-nums text-muted-foreground md:col-span-1 md:col-start-2">
                   {answeredQuestions} of {allQuestions.length} completed
                 </div>
 
@@ -2281,7 +2281,7 @@ function FiveSAuditExecution({
                       : !activeQuestion || !isQuestionComplete(activeQuestion)
                   }
                   onClick={handleNextQuestion}
-                  className="row-start-2 w-full sm:row-auto sm:w-auto"
+                  className="row-start-2 w-full md:row-auto md:w-auto"
                 >
                   {isLastQuestion
                     ? isLastSection
