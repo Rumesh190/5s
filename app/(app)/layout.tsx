@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { AuthGate } from "@/components/auth/auth-gate";
 
 // Wraps the standalone 5S workspace and profile route in the shared
 // application shell. The route group keeps this layout out of the URL and
@@ -10,5 +11,5 @@ export default function AppRouteGroupLayout({
 }: {
   children: ReactNode;
 }) {
-  return <AppShell>{children}</AppShell>;
+  return <AuthGate><AppShell>{children}</AppShell></AuthGate>;
 }

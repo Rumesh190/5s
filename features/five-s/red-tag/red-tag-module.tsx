@@ -18,6 +18,8 @@ import { FIVE_S_ZONE_CONFIGURATION, getMembersForZone, toLocalInputDate } from "
 import { useCurrentUser } from "@/lib/current-user";
 import { createRedTag, markTagPrinted, useRedTags } from "./store";
 import { RED_TAG_REASONS, RED_TAG_SECTIONS, type RedTag, type RedTagReason, type RedTagStatus } from "./types";
+import { useI18n } from "@/components/preferences/use-i18n";
+import { optimizeEvidenceImage } from "@/lib/evidence-images";
 
 const STATUS_TONE: Record<RedTagStatus, "danger" | "warning" | "success" | "secondary"> = {
   Open: "danger", "In Progress": "warning", Resolved: "success", Closed: "secondary",
@@ -40,6 +42,7 @@ function Summary({ tags }: { tags: RedTag[] }) {
 
 export function RedTagListPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const tags = useRedTags();
   const [search, setSearch] = useState(""); const [status, setStatus] = useState("All"); const [section, setSection] = useState("All");
   const [reason, setReason] = useState("All"); const [person, setPerson] = useState("All"); const [date, setDate] = useState("");
@@ -53,7 +56,7 @@ export function RedTagListPage() {
   });
   return <PageContainer className="max-w-none">
     <FiveSPageHeader eyebrow="5S Workspace" title="Red Tags" description="Track and manage tagged workplace issues."
-      actions={<Button onClick={() => router.push("/5s/red/create")}><Plus className="size-4" /> Create Red Tag</Button>} />
+      actions={<Button onClick={() => router.push("/5s/red/create")}><Plus className="size-4" /> {t("redTag.create")}</Button>} />
     <Summary tags={tags} />
     <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="grid gap-2 border-b bg-muted/15 p-3 md:grid-cols-3 xl:grid-cols-[minmax(220px,1.5fr)_repeat(5,minmax(130px,1fr))]">
@@ -84,6 +87,7 @@ function Filter({ value, onChange, label, options }: { value: string; onChange: 
 
 export function RedTagCreatePage() {
   const router = useRouter(); const user = useCurrentUser();
+  const { t } = useI18n();
   const today = useMemo(() => toLocalInputDate(new Date()), []); const tomorrow = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 1); return toLocalInputDate(d); }, []);
   const [zone, setZone] = useState(user.primaryZone); const [section, setSection] = useState("Production"); const [item, setItem] = useState(""); const [quantity, setQuantity] = useState("1");
   const [reason, setReason] = useState<RedTagReason | "">(""); const [customReason, setCustomReason] = useState(""); const [remarks, setRemarks] = useState(""); const [requiredAction, setRequiredAction] = useState("");
@@ -91,12 +95,12 @@ export function RedTagCreatePage() {
   const [creating, setCreating] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null); const cameraRef = useRef<HTMLInputElement>(null); const members = getMembersForZone(zone); const zoneConfig = FIVE_S_ZONE_CONFIGURATION.find((z) => z.name === zone);
   const valid = item.trim() && Number(quantity) >= 1 && reason && (reason !== "Others" || customReason.trim()) && requiredAction.trim() && personId && targetDate >= today;
-  async function imageChanged(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setImageUrl(String(reader.result)); reader.readAsDataURL(file); e.target.value = ""; }
+  async function imageChanged(e: React.ChangeEvent<HTMLInputElement>) { const file = e.target.files?.[0]; if (!file) return; try { const { dataUrl } = await optimizeEvidenceImage(file); setImageUrl(dataUrl); } catch (error) { window.alert(error instanceof Error ? error.message : "Unable to process this image."); } e.target.value = ""; }
   function submit() { if (!valid || !reason || creating) return; const person = members.find((m) => m.id === personId); if (!person) return; setCreating(true); window.setTimeout(() => { const tag = createRedTag({ plant: user.plant, zone, section, itemName: item.trim(), quantity: Number(quantity), reason, customReason: customReason.trim() || undefined, remarks: remarks.trim(), requiredAction: requiredAction.trim(), responsiblePersonId: person.id, responsiblePersonName: person.name, targetDate, createdById: user.id, createdByName: user.name, imageUrl }, user); router.push(`/5s/red/${tag.id}/print`); }, 240); }
   return <PageContainer className="max-w-none">
     <FiveSPageHeader eyebrow="Red Tags / Create" title="Create Red Tag" description="Capture the issue, assign it and print a physical tag."
       leading={<Button variant="ghost" size="icon-sm" onClick={() => router.push("/5s/red")}><ArrowLeft className="size-4" /></Button>}
-      actions={<><Button variant="ghost" onClick={() => router.push("/5s/red")} disabled={creating}>Cancel</Button><Button disabled={!valid || creating} onClick={submit}><Printer className="size-4" /> {creating ? "Creating Tag..." : "Create & Print Tag"}</Button></>} />
+      actions={<><Button variant="ghost" onClick={() => router.push("/5s/red")} disabled={creating}>{t("common.cancel")}</Button><Button disabled={!valid || creating} onClick={submit}><Printer className="size-4" /> {creating ? "Creating Tag..." : t("redTag.create")}</Button></>} />
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-5">
       <Card><CardContent className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
         <ReadOnly label="Plant" value={user.plant} /><Field label="Zone"><Select value={zone} onValueChange={(v) => { setZone(v ?? user.primaryZone); setPersonId(""); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{FIVE_S_ZONE_CONFIGURATION.map((z) => <SelectItem key={z.name} value={z.name}>{z.name}</SelectItem>)}</SelectContent></Select></Field>
@@ -133,28 +137,38 @@ export function RedTagDetailPage({ tagId }: { tagId: string }) {
   </PageContainer>;
 }
 
-function Meta({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Flag }) { return <div className="min-w-0">{Icon && <Icon className="mb-2 size-4 text-red-600" />}<p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>; }
+function Meta({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Flag }) { return <div className="min-w-0">{Icon && <Icon className="mb-2 size-4 text-red-600" />}<p className="break-words text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 break-words text-sm font-semibold [overflow-wrap:anywhere]">{value}</p></div>; }
 function Panel({ title, text }: { title: string; text: string }) { return <Card><CardContent className="p-5"><h2 className="font-semibold">{title}</h2><p className="mt-3 text-sm leading-6 text-muted-foreground">{text}</p></CardContent></Card>; }
 function Missing({ onBack }: { onBack: () => void }) { return <PageContainer><div className="grid min-h-[50vh] place-items-center rounded-xl border border-dashed"><div className="text-center"><Flag className="mx-auto size-9 text-muted-foreground" /><h1 className="mt-3 font-semibold">Red Tag not found</h1><Button className="mt-4" variant="outline" onClick={onBack}>Back to Red Tags</Button></div></div></PageContainer>; }
 
 export function RedTagPrintPage({ tagId }: { tagId: string }) {
   const router = useRouter(); const user = useCurrentUser(); const tag = useRedTags().find((item) => item.id === tagId);
+  const { t } = useI18n();
   if (!tag) return <Missing onBack={() => router.push("/5s/red")} />;
   const tagIdToPrint = tag.id;
-  function print() { markTagPrinted(tagIdToPrint, user); window.print(); }
-  return <PageContainer className="red-tag-print-page max-w-none"><div className="print:hidden"><FiveSPageHeader eyebrow="Red Tags / Print Preview" title="Print Red Tag" description="Print this label and attach it to the tagged item."
+  async function print() {
+    await document.fonts?.ready;
+    const root = document.querySelector<HTMLElement>(".red-tag-print-surface");
+    const images = root ? Array.from(root.querySelectorAll("img")) : [];
+    await Promise.all(images.map(async (image) => { if (image.complete) return; try { await image.decode(); } catch { /* Print the tag even if optional evidence fails. */ } }));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    markTagPrinted(tagIdToPrint, user);
+    window.print();
+  }
+  return <PageContainer className="red-tag-print-page max-w-none"><style>{`@media print { @page { size: A4 portrait; margin: 10mm; } }`}</style><div className="print:hidden"><FiveSPageHeader eyebrow="Red Tags / Print Preview" title="Print Red Tag" description="Print this label and attach it to the tagged item."
     leading={<Button variant="ghost" size="icon-sm" onClick={() => router.back()}><ArrowLeft className="size-4" /></Button>}
-    actions={<><Button variant="outline" onClick={() => router.push(`/5s/red/${tag.id}`)}><Eye className="size-4" /> View Red Tag</Button><Button onClick={print}><Printer className="size-4" /> Print Tag</Button></>} /></div>
-    <div className="motion-success-in grid place-items-center rounded-xl border bg-muted/25 p-4 sm:p-8 print:block print:border-0 print:bg-white print:p-0"><RedTagLabel tag={tag} /></div>
+    actions={<><Button variant="outline" onClick={() => router.push(`/5s/red/${tag.id}`)}><Eye className="size-4" /> {t("common.view")}</Button><Button onClick={print}><Printer className="size-4" /> {t("redTag.print")}</Button></>} /></div>
+    <div className="red-tag-print-surface motion-success-in grid place-items-center rounded-xl border bg-muted/25 p-4 sm:p-8"><RedTagLabel tag={tag} /></div>
   </PageContainer>;
 }
 
 function RedTagLabel({ tag }: { tag: RedTag }) {
-  return <article className="red-tag-label flex aspect-[2/3] w-full max-w-[400px] flex-col overflow-hidden border-[3px] border-red-700 bg-white text-black shadow-lg print:mx-auto print:w-[100mm] print:max-w-none print:shadow-none">
-    <header className="bg-red-700 px-5 py-4 text-center text-white"><p className="text-xs font-bold tracking-[.25em]">5S WORKPLACE CONTROL</p><h1 className="mt-1 text-3xl font-black tracking-wide">RED TAG</h1></header>
-    <div className="grid flex-1 content-between gap-4 p-5"><div className="text-center"><p className="text-[10px] font-bold uppercase tracking-widest text-red-700">Tag Number</p><p className="mt-1 font-mono text-xl font-black">{tag.tagNumber}</p></div><div className="flex justify-center"><QrCode value={`/5s/red/${tag.id}`} size={132} /></div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y-2 border-red-200 py-4"><LabelValue label="Item" value={tag.itemName} wide /><LabelValue label="Section" value={tag.section} /><LabelValue label="Quantity" value={String(tag.quantity)} /><LabelValue label="Reason" value={tag.reason === "Others" ? tag.customReason ?? tag.reason : tag.reason} wide /><LabelValue label="Action" value={tag.requiredAction} wide /><LabelValue label="Responsible" value={tag.responsiblePersonName} /><LabelValue label="Target Date" value={displayDate(tag.targetDate)} /></div>
+  return <article className="red-tag-label flex w-full max-w-[400px] flex-col overflow-hidden border-[3px] border-red-700 bg-white text-black shadow-lg">
+    <header className="bg-red-700 px-5 py-3 text-center text-white"><p className="text-[10px] font-bold tracking-[.25em]">5S WORKPLACE CONTROL</p><h1 className="mt-1 text-3xl font-black tracking-wide">RED TAG</h1></header>
+    <div className="grid flex-1 content-between gap-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[9px] font-bold uppercase tracking-widest text-red-700">Tag Number</p><p className="mt-1 font-mono text-lg font-black">{tag.tagNumber}</p></div><span className="rounded border-2 border-red-700 px-2 py-1 text-[10px] font-black uppercase text-red-700">{tag.status}</span></div><div className="flex justify-center"><QrCode value={`/5s/red/${tag.id}`} size={116} /></div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-y-2 border-red-200 py-3"><LabelValue label="Plant" value={tag.plant} /><LabelValue label="Zone" value={tag.zone} /><LabelValue label="Item / Equipment" value={tag.itemName} wide /><LabelValue label="Section" value={tag.section} /><LabelValue label="Quantity" value={String(tag.quantity)} /><LabelValue label="Reason" value={tag.reason === "Others" ? tag.customReason ?? tag.reason : tag.reason} wide />{tag.remarks && <LabelValue label="Issue / Remarks" value={tag.remarks} wide />}<LabelValue label="Required Action" value={tag.requiredAction} wide /><LabelValue label="Responsible" value={tag.responsiblePersonName} /><LabelValue label="Target Date" value={displayDate(tag.targetDate)} /></div>
       <div className="flex items-end justify-between gap-4 text-xs"><div><b>TAGGED BY</b><p>{tag.createdByName}</p></div><div className="text-right"><b>DATE</b><p>{displayDate(tag.createdAt)}</p></div></div>
+      <p className="border-t border-red-200 pt-2 text-center text-[9px] font-semibold leading-3 text-red-800">Attach this tag to the identified item until the issue is resolved and the tag is formally cleared.</p>
     </div></article>;
 }
 function LabelValue({ label, value, wide }: { label: string; value: string; wide?: boolean }) { return <div className={wide ? "col-span-2" : ""}><p className="text-[9px] font-black uppercase tracking-widest text-red-700">{label}</p><p className="mt-0.5 text-xs font-bold leading-4">{value}</p></div>; }

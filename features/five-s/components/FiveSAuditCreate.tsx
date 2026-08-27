@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useI18n } from "@/components/preferences/use-i18n";
 
 interface FiveSAuditCreateProps {
   onBack: () => void;
@@ -41,9 +42,9 @@ interface FiveSAuditCreateProps {
   }) => void;
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, locale: string): string {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("en-IN", {
+  return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -101,6 +102,7 @@ function SummaryItem({ label, value, mono = false }: { label: string; value: str
 }
 
 export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreateProps) {
+  const { locale, t } = useI18n();
   const currentUser = useCurrentUser();
   const createdAt = useMemo(() => new Date(), []);
   const today = useMemo(() => toLocalInputDate(createdAt), [createdAt]);
@@ -119,12 +121,12 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
     ? getNextFiveSAuditTitle(currentUser.plant, zone)
     : "";
 
-  const createdDate = new Intl.DateTimeFormat("en-IN", {
+  const createdDate = new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
     year: "numeric",
   }).format(createdAt);
-  const createdTime = new Intl.DateTimeFormat("en-IN", {
+  const createdTime = new Intl.DateTimeFormat(locale, {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -147,19 +149,19 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
         <FiveSPageHeader
           eyebrow=""
           title="Create 5S Audit"
-          description={generatedAuditTitle || "Select a zone to generate the audit ID"}
+          description={generatedAuditTitle || t("audit.selectZoneForId")}
           className="border-b-0 pb-3"
           leading={
-            <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Back" className="-ml-2 shrink-0">
+            <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label={t("common.back")} className="-ml-2 shrink-0">
               <ArrowLeft className="size-4" />
             </Button>
           }
           actions={
             <>
-              <Button type="button" variant="outline" onClick={onBack}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={onBack}>{t("common.cancel")}</Button>
               <Button type="submit" form="five-s-audit-form" disabled={!isValid || starting}>
                 {starting ? <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" /> : <Check className="size-4" />}
-                {starting ? "Starting..." : "Start Audit"}
+                {starting ? t("audit.starting") : t("audit.startAction")}
               </Button>
             </>
           }
@@ -171,48 +173,48 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
           <Card className="gap-0">
             <CardContent className="p-5 lg:p-6">
               <section>
-                <h2 className="text-sm font-semibold">Workplace Information</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Your plant is supplied by your profile. Select the zone being audited.</p>
+                <h2 className="text-sm font-semibold">{t("audit.workplaceInformation")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("audit.workplaceHelp")}</p>
 
                 <div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
-                  <ReadOnlyField label="Plant" value={currentUser.plant} placeholder="Profile plant unavailable" />
+                  <ReadOnlyField label={t("audit.plant")} value={currentUser.plant} placeholder={t("audit.profilePlantUnavailable")} />
 
                   <div className="grid gap-2">
-                    <Label>Zone</Label>
+                    <Label>{t("audit.zone")}</Label>
                     <Select value={zone} onValueChange={(value) => setZone(value ?? "")}>
                       <SelectTrigger className="h-11 min-h-11 w-full px-3">
-                        <SelectValue placeholder="Select zone" />
+                        <SelectValue placeholder={t("audit.selectZone")} />
                       </SelectTrigger>
                       <SelectContent>
                         {FIVE_S_ZONE_CONFIGURATION.map((item) => (
-                          <SelectItem key={item.code} value={item.name} disabled={item.name === currentUser.primaryZone}>{item.name}{item.name === currentUser.primaryZone ? " — Your own Zone" : ""}</SelectItem>
+                          <SelectItem key={item.code} value={item.name} disabled={item.name === currentUser.primaryZone}>{item.name}{item.name === currentUser.primaryZone ? ` — ${t("audit.ownZone")}` : ""}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div key={`leader-${zone}`} className="motion-success-in"><ReadOnlyField label="Zone Leader" value={selectedZone?.leader} placeholder="Select a zone first" /></div>
+                  <div key={`leader-${zone}`} className="motion-success-in"><ReadOnlyField label={t("audit.zoneLeader")} value={selectedZone?.leader} placeholder={t("audit.selectZoneFirst")} /></div>
                   <div key={`audit-${generatedAuditTitle}`} className="motion-success-in"><ReadOnlyField
-                    label="Audit ID"
+                    label={t("audit.auditId")}
                     value={generatedAuditTitle}
-                    placeholder="Generated after zone selection"
+                    placeholder={t("audit.generatedAfterZone")}
                     mono
-                    helper="Generated automatically based on Plant and Zone"
+                    helper={t("audit.generatedIdHelp")}
                   /></div>
                 </div>
               </section>
 
               <section className="mt-5 border-t border-border/65 pt-5">
-                <h2 className="text-sm font-semibold">Audit Details</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Confirm the assigned auditor and required completion date.</p>
+                <h2 className="text-sm font-semibold">{t("audit.details")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("audit.detailsHelp")}</p>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <ReadOnlyField label="Auditor" value={currentUser.name} placeholder="Auditor unavailable" />
+                  <ReadOnlyField label={t("audit.auditor")} value={currentUser.name} placeholder={t("audit.auditorUnavailable")} />
                   <div className="grid gap-2">
                     <div className="flex min-h-5 items-center gap-1.5">
-                      <Label htmlFor="five-s-due-date">Due Date</Label>
-                      <FieldInfo label="Due Date">
-                        Defaults to {formatDate(defaultDueDate)}. Previous dates cannot be selected.
+                      <Label htmlFor="five-s-due-date">{t("audit.dueDate")}</Label>
+                      <FieldInfo label={t("audit.dueDate")}>
+                        {formatDate(defaultDueDate, locale)}. {t("audit.dueDateHelp")}
                       </FieldInfo>
                     </div>
                     <Input
@@ -229,15 +231,15 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
 
               <section className="mt-5 border-t border-border/65 pt-5">
                 <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
-                  <h2 className="text-sm font-semibold">Audit Summary</h2>
+                  <h2 className="text-sm font-semibold">{t("audit.summary")}</h2>
                   <div className="mt-4 grid min-w-0 gap-x-5 gap-y-4 sm:grid-cols-2 2xl:grid-cols-4">
-                    <SummaryItem label="Audit ID" value={generatedAuditTitle || "Pending zone selection"} mono />
-                    <SummaryItem label="Plant" value={currentUser.plant} />
-                    <SummaryItem label="Zone" value={selectedZone?.name || "Not selected"} />
-                    <SummaryItem label="Zone Leader" value={selectedZone?.leader || "Pending"} />
-                    <SummaryItem label="Auditor" value={currentUser.name} />
-                    <SummaryItem label="Created" value={`${createdDate} · ${createdTime}`} />
-                    <SummaryItem label="Schedule" value={`Due ${formatDate(dueDate)}`} />
+                    <SummaryItem label={t("audit.auditId")} value={generatedAuditTitle || t("audit.pendingZoneSelection")} mono />
+                    <SummaryItem label={t("audit.plant")} value={currentUser.plant} />
+                    <SummaryItem label={t("audit.zone")} value={selectedZone?.name || t("common.notSelected")} />
+                    <SummaryItem label={t("audit.zoneLeader")} value={selectedZone?.leader || t("common.pending")} />
+                    <SummaryItem label={t("audit.auditor")} value={currentUser.name} />
+                    <SummaryItem label={t("common.created")} value={`${createdDate} · ${createdTime}`} />
+                    <SummaryItem label={t("audit.schedule")} value={`${t("audit.due")} ${formatDate(dueDate, locale)}`} />
                   </div>
                 </div>
               </section>

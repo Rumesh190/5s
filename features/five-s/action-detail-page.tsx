@@ -60,6 +60,7 @@ import {
 } from "@/lib/actions/action-store";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
 import { useCurrentUser } from "@/lib/current-user";
+import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage } from "@/lib/evidence-images";
 
 const STATUS_VARIANTS = {
   Assigned: "info",
@@ -189,6 +190,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   async function addEvidence(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file || !canEdit) return;
+    if ((action?.evidence.length ?? 0) >= MAX_EVIDENCE_IMAGES) { window.alert("Maximum 5 evidence images allowed."); event.target.value = ""; return; }
     const url = file.type.startsWith("image/") ? await readImage(file) : undefined;
     addActionEvidence(actionId, {
       id: `EV-${crypto.randomUUID()}`,
@@ -324,9 +326,9 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
                   <p className="mt-0.5 text-xs text-muted-foreground">Upload evidence showing the completed corrective action.</p>
                 </div>
                 {canEdit && (
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" /> Upload</Button>
-                    <Button size="sm" variant="outline" onClick={() => cameraInputRef.current?.click()}><ImageIcon className="size-4" /> Camera</Button>
+                  <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                    <Button size="sm" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" /> Upload</Button>
+                    <Button size="sm" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => cameraInputRef.current?.click()}><ImageIcon className="size-4" /> Camera</Button>
                   </div>
                 )}
               </div>
@@ -352,7 +354,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
           </div>
         </Panel>
 
-          {canReview && <Panel title="Review Decision" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm leading-6 text-muted-foreground">Review the original finding, corrective measure and Before/After evidence before making a decision.</p><div className="mt-4 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={()=>setSendBackOpen(true)}><RotateCcw className="size-4"/> Send Back</Button><Button onClick={()=>setCloseOpen(true)}><CheckCircle2 className="size-4"/> Close Action</Button></div></Panel>}
+          {canReview && <Panel title="Review Decision" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm leading-6 text-muted-foreground">Review the original finding, corrective measure and Before/After evidence before making a decision.</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"><Button className="w-full sm:w-auto" variant="outline" onClick={()=>setSendBackOpen(true)}><RotateCcw className="size-4"/> Send Back</Button><Button className="w-full sm:w-auto" onClick={()=>setCloseOpen(true)}><CheckCircle2 className="size-4"/> Close Action</Button></div></Panel>}
         </main>
 
         <aside className="order-first min-w-0 2xl:order-none 2xl:sticky 2xl:top-4"><ActionSummary action={action} /></aside>
@@ -533,10 +535,5 @@ function formatDateTime(value: string) {
 }
 
 function readImage(file: File): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : undefined);
-    reader.onerror = () => resolve(undefined);
-    reader.readAsDataURL(file);
-  });
+  return optimizeEvidenceImage(file).then(({ dataUrl }) => dataUrl).catch((error) => { window.alert(error instanceof Error ? error.message : "Unable to process this image."); return undefined; });
 }

@@ -62,6 +62,7 @@ import {
 } from "@/lib/actions/action-store";
 import { useCurrentUser } from "@/lib/current-user";
 import { FIVE_S_ACTION_CATEGORIES } from "@/lib/five-s/configuration";
+import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage } from "@/lib/evidence-images";
 
 import type {
   MyAction,
@@ -435,6 +436,7 @@ export default function MyActionsPage() {
     if (!file) {
       return;
     }
+    if (selectedAction.evidence.length >= MAX_EVIDENCE_IMAGES) { window.alert("Maximum 5 evidence images allowed."); event.target.value = ""; return; }
 
     let url: string | undefined;
 
@@ -475,23 +477,7 @@ export default function MyActionsPage() {
   function readImageAsDataUrl(
     file: File
   ): Promise<string | undefined> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        resolve(
-          typeof reader.result === "string"
-            ? reader.result
-            : undefined
-        );
-      };
-
-      reader.onerror = () => {
-        resolve(undefined);
-      };
-
-      reader.readAsDataURL(file);
-    });
+    return optimizeEvidenceImage(file).then(({ dataUrl }) => dataUrl).catch((error) => { window.alert(error instanceof Error ? error.message : "Unable to process this image."); return undefined; });
   }
 
   /* =========================================================

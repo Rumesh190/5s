@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { createAction } from "@/lib/actions/action-store";
+import { optimizeEvidenceImage, MAX_EVIDENCE_IMAGES } from "@/lib/evidence-images";
 
 import type {
   FiveSAudit,
@@ -882,7 +883,7 @@ function FiveSAuditExecution({
      EVIDENCE HELPERS
      ======================================================= */
 
-  function createEvidence(
+  async function createEvidence(
     file: File,
     type:
       | "image"
@@ -894,15 +895,11 @@ function FiveSAuditExecution({
       return;
     }
 
-    const reader =
-      new FileReader();
-
-    reader.onload = () => {
-      const dataUrl =
-        typeof reader.result ===
-        "string"
-          ? reader.result
-          : "";
+    const questionId = selectedEvidenceQuestion.id;
+    const currentEvidence = questionStates[questionId]?.evidence ?? [];
+    if (currentEvidence.length >= MAX_EVIDENCE_IMAGES) { window.alert("Maximum 5 evidence images allowed."); return; }
+    try {
+      const { dataUrl, size } = await optimizeEvidenceImage(file);
 
       const evidence: FiveSEvidence =
         {
@@ -912,7 +909,7 @@ function FiveSAuditExecution({
 
           type,
 
-          size: file.size,
+          size,
 
           dataUrl,
 
@@ -925,14 +922,6 @@ function FiveSAuditExecution({
             "Rumesh Ravi",
         };
 
-      const questionId =
-        selectedEvidenceQuestion.id;
-
-      const currentEvidence =
-        questionStates[
-          questionId
-        ]?.evidence ?? [];
-
       updateQuestionState(
         questionId,
         {
@@ -942,9 +931,7 @@ function FiveSAuditExecution({
           ],
         }
       );
-    };
-
-    reader.readAsDataURL(file);
+    } catch (error) { window.alert(error instanceof Error ? error.message : "Unable to process this image."); }
   }
 
   /* =======================================================

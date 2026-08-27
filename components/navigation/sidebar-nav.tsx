@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { isNavGroup, isNavItemActive, MAIN_NAV, type NavLeaf } from "@/lib/navigation"
+import { useI18n } from "@/components/preferences/use-i18n"
+import { navigationKey } from "@/lib/i18n"
 
 interface SidebarNavProps {
   collapsed?: boolean
@@ -35,6 +37,8 @@ function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
 
 function SidebarLink({ entry, active, collapsed, onNavigate }: { entry: NavLeaf; active: boolean; collapsed: boolean; onNavigate?: () => void }) {
   const Icon = entry.icon
+  const { t } = useI18n()
+  const label = t(navigationKey(entry.href))
   const link = (
     <Link
       href={entry.href}
@@ -54,8 +58,8 @@ function SidebarLink({ entry, active, collapsed, onNavigate }: { entry: NavLeaf;
       )}>
         <Icon className="size-4" />
       </span>
-      {!collapsed && <span className="truncate">{entry.label}</span>}
-      {collapsed && <span className="sr-only">{entry.label}</span>}
+      {!collapsed && <span className="break-words leading-5">{label}</span>}
+      {collapsed && <span className="sr-only">{label}</span>}
     </Link>
   )
 
@@ -64,7 +68,7 @@ function SidebarLink({ entry, active, collapsed, onNavigate }: { entry: NavLeaf;
   return (
     <Tooltip>
       <TooltipTrigger render={link} />
-      <TooltipContent side="right">{entry.label}</TooltipContent>
+      <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   )
 }

@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { FIVE_S_AUDITS } from "@/features/five-s/data/five-s-data";
 
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
+import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 /* =========================================================
    STORAGE
@@ -80,7 +81,7 @@ function loadFromStorage(): void {
       if (canonicalAudit) {
         storedAudits = [canonicalAudit, ...storedAudits.filter((audit) => audit.id !== canonicalAudit.id)];
       }
-      window.localStorage.setItem(AUDIT_FIXTURE_VERSION_KEY, AUDIT_FIXTURE_VERSION);
+      safeSetStorageString(AUDIT_FIXTURE_VERSION_KEY, AUDIT_FIXTURE_VERSION);
     }
 
     const storedIds = new Set(storedAudits.map((audit) => audit.id));
@@ -105,17 +106,7 @@ function persistAudits(): void {
     return;
   }
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(audits)
-    );
-  } catch (error) {
-    console.error(
-      "Failed to save 5S audits to localStorage:",
-      error
-    );
-  }
+  safeSetStorage(STORAGE_KEY, audits);
 }
 
 /* =========================================================
@@ -293,7 +284,7 @@ function reserveNextAuditNumber(plant: string, area: string): number {
   if (typeof window !== "undefined") {
     const sequences = getStoredSequences();
     sequences[getSequenceKey(plant, area)] = nextNumber + 1;
-    window.localStorage.setItem(AUDIT_SEQUENCE_STORAGE_KEY, JSON.stringify(sequences));
+    safeSetStorage(AUDIT_SEQUENCE_STORAGE_KEY, sequences);
   }
 
   return nextNumber;
@@ -780,6 +771,11 @@ export function completeFiveSAudit(
     return undefined;
   }
 
+  if (!existingAudit.auditorSignature) {
+    console.warn(`Auditor signature is required before completing 5S audit: ${auditId}`);
+    return undefined;
+  }
+
   const now =
     new Date();
 
@@ -898,12 +894,7 @@ export function resetFiveSAudits(): void {
     const highest =
       getHighestAuditNumber();
 
-    window.localStorage.setItem(
-      AUDIT_NUMBER_STORAGE_KEY,
-      String(
-        highest + 1
-      )
-    );
+    safeSetStorageString(AUDIT_NUMBER_STORAGE_KEY, String(highest + 1));
 
     window.localStorage.removeItem(
       AUDIT_SEQUENCE_STORAGE_KEY

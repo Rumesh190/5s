@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 export interface AppNotification {
   id: string;
@@ -41,8 +42,8 @@ function load() {
     if (window.localStorage.getItem(FIXTURE_VERSION_KEY) !== FIXTURE_VERSION) {
       const fixtureIds = new Set(CANONICAL_NOTIFICATIONS.map((item) => item.id));
       notifications = [...CANONICAL_NOTIFICATIONS, ...notifications.filter((item) => !fixtureIds.has(item.id))];
-      window.localStorage.setItem(FIXTURE_VERSION_KEY, FIXTURE_VERSION);
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+      safeSetStorageString(FIXTURE_VERSION_KEY, FIXTURE_VERSION);
+      safeSetStorage(STORAGE_KEY, notifications);
     }
   } catch {
     notifications = [];
@@ -52,7 +53,7 @@ function load() {
 function emit() {
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+      safeSetStorage(STORAGE_KEY, notifications);
     } catch (error) {
       console.error("Failed to save notifications:", error);
     }

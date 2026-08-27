@@ -56,6 +56,14 @@ export interface FiveSQuestion {
 
   description?: string;
 
+  referenceImage?: string;
+
+  referenceTitleKey?: string;
+
+  referenceGuidanceKey?: string;
+
+  referenceAltKey?: string;
+
   maxScore: number;
 
   score: number | null;
@@ -115,6 +123,13 @@ export interface FiveSAudit {
   startedAt?: string;
 
   completedAt?: string;
+
+  auditorSignature?: {
+    userId: string;
+    userName: string;
+    signedAt: string;
+    signatureImage: string;
+  };
 
   dueDate: string;
 

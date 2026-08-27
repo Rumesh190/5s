@@ -12,6 +12,8 @@ import { UserMenu } from "@/components/navigation/user-menu"
 import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/components/preferences/use-i18n"
+import { navigationKey } from "@/lib/i18n"
 
 const HIDE_DISTANCE = 36
 const SHOW_DISTANCE = 18
@@ -25,6 +27,7 @@ function ProductNav() {
   const direction = React.useRef<"up" | "down" | null>(null)
   const ticking = React.useRef(false)
   const [hidden, setHidden] = React.useState(false)
+  const { t } = useI18n()
 
   const navGroup = MAIN_NAV.find(isNavGroup)
   const items = navGroup?.children ?? []
@@ -120,6 +123,12 @@ function ProductNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                onDoubleClick={(event) => {
+                  if (active && item.href === "/5s/audits") {
+                    event.preventDefault()
+                    window.location.assign(item.href)
+                  }
+                }}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "group relative h-9 items-center gap-2 rounded-md px-2.5 text-[13.5px] font-medium xl:px-3",
@@ -130,17 +139,17 @@ function ProductNav() {
                 )}
               >
                 <Icon className={cn("size-4", active ? "text-[var(--brand-accent)] dark:text-[var(--brand-accent-light)]" : "text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300")} />
-                {item.label}
+                <span className="whitespace-nowrap">{t(navigationKey(item.href))}</span>
                 {active && <span className="absolute inset-x-3 -bottom-[14px] h-0.5 rounded-full bg-[var(--brand-accent)] dark:bg-[var(--brand-accent-light)]" />}
               </Link>
             )
           })}
           {secondaryItems.length > 0 && <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-slate-600 dark:text-slate-400 xl:hidden" />}>
-              <MoreHorizontal className="size-4" /> More
+              <MoreHorizontal className="size-4" /> {t("navigation.more")}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="w-56">
-              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="truncate">{item.label}</span></DropdownMenuItem> })}
+              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="break-words">{t(navigationKey(item.href))}</span></DropdownMenuItem> })}
             </DropdownMenuContent>
           </DropdownMenu>}
         </nav>

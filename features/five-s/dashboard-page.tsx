@@ -22,6 +22,9 @@ import {
 import { useActionStore } from "@/lib/actions/action-store";
 import {
   AuditScoreTrend,
+  CorrectiveActionsChart,
+  ImprovementsTrend,
+  ZonePerformanceChart,
 } from "./components/FiveSDashboardCharts";
 
 import type {
@@ -36,6 +39,7 @@ import {
   ArrowRight,
   Clock3,
   CheckCircle2,
+  ExternalLink,
   Image as ImageIcon,
   Plus,
   Sparkles,
@@ -43,16 +47,10 @@ import {
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { canAuditZone } from "@/lib/five-s/configuration";
 import type { MyAction, MyActionEvidence, MyActionStatus } from "./types/my-actions";
+import { useI18n } from "@/components/preferences/use-i18n";
 
-type DashboardPeriod = "week" | "month" | "quarter" | "year" | "custom";
-
-const PERIOD_OPTIONS: Array<{ value: DashboardPeriod; label: string }> = [
-  { value: "week", label: "Week" },
-  { value: "month", label: "Month" },
-  { value: "quarter", label: "Quarter" },
-  { value: "year", label: "Year" },
-  { value: "custom", label: "Custom" },
-];
+type DashboardPeriod = "week" | "month" | "year" | "custom";
+type DashboardView = "overview" | "nc-summary" | "before-after";
 
 function parseDate(value?: string) {
   if (!value) return null;
@@ -70,10 +68,6 @@ function getPeriodKey(value: string, period: DashboardPeriod) {
   const year = date.getFullYear();
 
   if (period === "year") return { key: `${year}`, label: `${year}` };
-  if (period === "quarter") {
-    const quarter = Math.floor(date.getMonth() / 3) + 1;
-    return { key: `${year}-Q${quarter}`, label: `Q${quarter} ${year}` };
-  }
   if (period === "month" || period === "custom") {
     return {
       key: `${year}-${String(date.getMonth() + 1).padStart(2, "0")}`,
@@ -94,7 +88,6 @@ function getPeriodStart(period: DashboardPeriod) {
   const date = new Date();
   if (period === "week") date.setDate(date.getDate() - 41);
   if (period === "month") date.setMonth(date.getMonth() - 3, 1);
-  if (period === "quarter") date.setMonth(date.getMonth() - 9, 1);
   if (period === "year") date.setFullYear(date.getFullYear() - 3, 0, 1);
   if (period === "custom") return "";
   return date.toISOString().slice(0, 10);
@@ -247,6 +240,7 @@ function createEmptyFiveSSections(): FiveSSection[] {
 export default function FiveSDashboardPage() {
   const audits = useFiveSAuditStore();
   const actions = useActionStore();
+  const { t } = useI18n();
 
   const [selectedAudit, setSelectedAudit] =
     useState<FiveSAudit | null>(null);
@@ -258,8 +252,10 @@ export default function FiveSDashboardPage() {
   const [period, setPeriod] = useState<DashboardPeriod>("month");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [zoneFilter, setZoneFilter] = useState("All");
+  const zoneFilter = "All";
   const [preview, setPreview] = useState<MyActionEvidence | null>(null);
+  const [dashboardView, setDashboardView] = useState<DashboardView>("overview");
+  const [selectedImprovementId, setSelectedImprovementId] = useState<string | null>(null);
 
   /* =======================================================
      DASHBOARD METRICS
@@ -317,6 +313,28 @@ export default function FiveSDashboardPage() {
       return (overdue ? 100 : 0) + (action.priority === "Critical" ? 40 : action.priority === "High" ? 30 : 0) + (action.status === "Rework Required" ? 20 : action.status === "Pending Review" || action.status === "Awaiting Review" ? 10 : 0);
     };
 
+    const actionsByZone = new Map<string, { Open: number; Closed: number }>();
+    filteredActions.forEach((action) => {
+      const current = actionsByZone.get(action.area) ?? { Open: 0, Closed: 0 };
+      if (action.status === "Completed") current.Closed += 1;
+      else current.Open += 1;
+      actionsByZone.set(action.area, current);
+    });
+    const nonComplianceByZone = Array.from(actionsByZone, ([zone, counts]) => ({ zone, ...counts }))
+      .sort((a, b) => a.zone.localeCompare(b.zone));
+
+    const improvementPeriods = new Map<string, { label: string; value: number }>();
+    filteredActions.filter((action) => action.status === "Completed").forEach((action) => {
+      const date = action.completedAt ?? action.createdAt;
+      const bucket = getPeriodKey(date, period);
+      const current = improvementPeriods.get(bucket.key) ?? { label: bucket.label, value: 0 };
+      current.value += 1;
+      improvementPeriods.set(bucket.key, current);
+    });
+    const improvementTrend = Array.from(improvementPeriods.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value);
+
     return {
       averageScore,
       topZone: zonePerformance[0],
@@ -330,10 +348,18 @@ export default function FiveSDashboardPage() {
       trendChange,
       statusCounts,
       averageClosureDays,
+      nonComplianceByZone,
+      improvementTrend,
+      filteredActions,
       attention: filteredActions.filter((action) => action.status !== "Completed").sort((a,b) => attentionRank(b) - attentionRank(a) || a.dueDate.localeCompare(b.dueDate)).slice(0, 5),
       improvements: filteredActions.filter((action) => action.status === "Completed").sort((a,b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "")).slice(0, 3),
     };
   }, [actions, audits, endDate, period, startDate, zoneFilter]);
+
+  const selectedImprovement =
+    metrics.filteredActions.find((action) => action.id === selectedImprovementId) ??
+    metrics.filteredActions.find((action) => action.status === "Completed") ??
+    metrics.filteredActions[0];
 
   /* =======================================================
      START AUDIT
@@ -460,74 +486,171 @@ export default function FiveSDashboardPage() {
     <PageContainer className="max-w-none">
       <FiveSPageHeader
         eyebrow="5S Workspace"
-        title="Dashboard"
-        description="Monitor workplace 5S performance, corrective issues, and completed improvements."
+        title={t("dashboard.title")}
+        description={t("dashboard.description")}
         actions={
           <Button type="button" onClick={handleStartAudit}>
             <Plus className="size-4" />
-            Start 5S Audit
+            {t("audit.start")}
           </Button>
-        }
-        toolbar={
-          <>
-            <div className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border/80 bg-muted/35 p-1 sm:w-auto" role="group" aria-label="Dashboard time grouping">
-              {PERIOD_OPTIONS.map((option) => (
-                <Button
-                  key={option.value}
-                  type="button"
-                  size="sm"
-                  variant={period === option.value ? "default" : "ghost"}
-                  onClick={() => setPeriod(option.value)}
-                  aria-pressed={period === option.value}
-                  className="shrink-0"
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-            <div className="grid w-full gap-2 sm:ml-auto sm:w-auto sm:grid-cols-2 lg:grid-cols-4">
-              <div className="flex h-9 items-center rounded-md border bg-muted/25 px-3 text-xs font-medium">Egmore Plant</div>
-              <DashboardFilter value={zoneFilter} onChange={setZoneFilter} label="All Zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone) => zone.name)} />
-              {period === "custom" && <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="h-9 rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring" />
-              </label>}
-              {period === "custom" && <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="h-9 rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring" />
-              </label>}
-            </div>
-          </>
         }
       />
 
-      <section className="grid min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,.85fr)]">
-        <div className="flex min-w-0 flex-col justify-between gap-6 border-b p-4 sm:p-5 xl:min-h-64 xl:border-b-0 xl:border-r xl:p-6">
-          <div><p className="text-[11px] font-bold uppercase tracking-[.14em] text-muted-foreground">Overall 5S Health</p><div className="mt-5 flex flex-wrap items-center gap-7"><HealthGauge score={metrics.averageScore} /><div><p className={`text-5xl font-bold tracking-tight ${metrics.averageScore < 60 ? "text-red-600 dark:text-red-400" : metrics.averageScore < 80 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>{metrics.averageScore}%</p><p className="mt-1 text-lg font-semibold">{healthLabel(metrics.averageScore)}</p><p className="mt-2 text-sm text-muted-foreground">{metrics.trendChange >= 0 ? "↑" : "↓"} {Math.abs(metrics.trendChange)}% versus previous period</p></div></div></div>
-          <p className="rounded-lg border bg-muted/25 px-3 py-2 text-sm text-muted-foreground">{metrics.overdueActions ? `${metrics.overdueActions} corrective action${metrics.overdueActions === 1 ? " is" : "s are"} overdue and require attention.` : "No overdue corrective actions in this period."}</p>
+      <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/80 bg-card p-1 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <nav className="flex min-w-0 gap-1 overflow-x-auto" aria-label="Dashboard views">
+          {([
+            ["overview", t("dashboard.overview")],
+            ["nc-summary", t("dashboard.ncSummary")],
+            ["before-after", t("dashboard.beforeAfter")],
+          ] as const).map(([value, label]) => (
+            <Button key={value} type="button" size="sm" variant={dashboardView === value ? "default" : "ghost"} onClick={() => setDashboardView(value)} className="shrink-0">
+              {label}
+            </Button>
+          ))}
+        </nav>
+        <div className="flex min-w-0 flex-wrap items-center gap-1 border-t px-1 pt-1 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0" role="group" aria-label="Dashboard time range">
+          {(["week", "month", "year", "custom"] as const).map((value) => (
+            <Button key={value} type="button" size="sm" variant={period === value ? "secondary" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="shrink-0 capitalize">
+              {value === "week" ? t("common.weekly") : value === "month" ? t("common.monthly") : value === "year" ? t("common.yearly") : t("common.custom")}
+            </Button>
+          ))}
+          {period === "custom" && <div className="flex min-w-0 flex-wrap items-center gap-1 pl-1">
+            <input aria-label="Dashboard start date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring" />
+            <span className="text-xs text-muted-foreground">to</span>
+            <input aria-label="Dashboard end date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring" />
+          </div>}
         </div>
-        <div className="grid grid-cols-2 divide-x divide-y">
-          <ExecutiveMetric label="Open non-compliances" value={metrics.openActions} detail={`${metrics.overdueActions} overdue`} icon={AlertTriangle} tone="danger" />
-          <ExecutiveMetric label="Closed actions" value={metrics.completedActions} detail={`${metrics.closureRate}% closure rate`} icon={CheckCircle2} tone="success" />
-          <ExecutiveMetric label="Overdue actions" value={metrics.overdueActions} detail="Require attention" icon={Clock3} tone="warning" />
-          <ExecutiveMetric label="Improvements" value={metrics.completedActions} detail="Verified corrective actions" icon={Sparkles} tone="info" />
-        </div>
-      </section>
-
-      <div className="grid min-w-0 items-stretch gap-5 lg:grid-cols-2 2xl:grid-cols-[1.25fr_.9fr_.85fr]">
-        <AuditScoreTrend data={metrics.auditTrend} change={metrics.trendChange} />
-        <ZoneRanking data={metrics.zonePerformance} />
-        <ActionHealth total={metrics.totalActions} counts={metrics.statusCounts} closureRate={metrics.closureRate} averageDays={metrics.averageClosureDays} />
       </div>
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
-        <Card className="overflow-hidden"><CardHeader className="border-b"><div className="flex w-full items-start justify-between gap-4"><div><CardTitle className="text-base">Attention Required</CardTitle><p className="mt-1 text-xs text-muted-foreground">Priority corrective work needing management focus.</p></div><Button variant="ghost" size="sm" className="shrink-0" onClick={()=>router.push("/5s/actions")}>View All <ArrowRight className="size-4" /></Button></div></CardHeader><CardContent className="p-0">{metrics.attention.length ? metrics.attention.map((action)=><button key={action.id} onClick={()=>router.push(`/5s/actions/${action.id}`)} className="flex w-full items-center gap-3 border-b px-5 py-3 text-left transition-colors last:border-0 hover:bg-muted/35"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><PriorityBadge priority={action.priority} /><p className="truncate text-sm font-semibold">{action.title}</p></div><p className="mt-1 text-xs text-muted-foreground">{action.area} · {action.responsiblePersonName ?? action.assignedTo} · Due {formatDashboardDate(action.dueDate)}</p></div><ActionStatusBadge status={action.status} /></button>) : <p className="py-14 text-center text-sm text-muted-foreground">No corrective actions currently require attention.</p>}</CardContent></Card>
-        {metrics.improvements[0] ? <ImprovementSpotlight action={metrics.improvements[0]} onPreview={setPreview} onOpen={()=>router.push(`/5s/actions/${metrics.improvements[0].id}/report`)} /> : <Card className="grid min-h-64 place-items-center border-dashed"><div className="text-center"><Sparkles className="mx-auto size-6 text-muted-foreground" /><p className="mt-2 text-sm text-muted-foreground">No completed improvements for this period.</p></div></Card>}
-      </div>
+      {dashboardView === "overview" && <section className="grid min-w-0 gap-4 xl:grid-cols-[180px_minmax(0,1fr)]">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 xl:auto-rows-fr xl:grid-cols-1">
+          <DashboardKpi value={`${metrics.averageScore}%`} label={t("dashboard.auditScore")} tone={metrics.averageScore < 60 ? "danger" : metrics.averageScore < 80 ? "warning" : "success"} />
+          <DashboardKpi value={metrics.topZone?.zone ?? "—"} label={t("dashboard.topZone")} detail={metrics.topZone ? `${metrics.topZone.score}% score` : "No audit data"} />
+          <DashboardKpi value={metrics.totalActions} label={t("dashboard.nonCompliance")} tone="danger" />
+          <DashboardKpi value={metrics.completedActions} label={t("dashboard.closed")} tone="success" />
+          <DashboardKpi value={metrics.completedActions} label={t("dashboard.improvements")} tone="info" />
+        </div>
 
-      {metrics.improvements.length > 1 && <section><div className="mb-3 flex items-end justify-between"><div><h2 className="text-base font-semibold">Recent Improvements</h2><p className="mt-1 text-sm text-muted-foreground">Verified workplace changes from completed actions.</p></div><Button variant="ghost" size="sm" onClick={()=>router.push("/5s/actions")}>View All Improvements <ArrowRight className="size-4" /></Button></div><div className="grid gap-4 xl:grid-cols-2">{metrics.improvements.slice(1).map((action)=><ImprovementCard key={action.id} action={action} onOpen={()=>router.push(`/5s/actions/${action.id}/report`)} />)}</div></section>}
+        <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+          <AuditScoreTrend data={metrics.auditTrend} change={metrics.trendChange} />
+          <ZonePerformanceChart data={metrics.zonePerformance} />
+          <CorrectiveActionsChart data={metrics.nonComplianceByZone} />
+          <ImprovementsTrend data={metrics.improvementTrend} />
+        </div>
+      </section>}
+
+      {dashboardView === "nc-summary" && (
+        <NCSummaryTable
+          actions={metrics.filteredActions}
+          onPreview={setPreview}
+          onOpen={(action) => {
+            setSelectedImprovementId(action.id);
+            setDashboardView("before-after");
+          }}
+          onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)}
+        />
+      )}
+
+      {dashboardView === "before-after" && (
+        <BeforeAfterView
+          action={selectedImprovement}
+          actions={metrics.filteredActions}
+          onSelect={setSelectedImprovementId}
+          onPreview={setPreview}
+          onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)}
+        />
+      )}
 
       <Dialog open={Boolean(preview)} onOpenChange={(open)=>!open&&setPreview(null)}><DialogContent className="max-w-5xl"><DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>{preview?.type === "image" && preview.url ? <img src={preview.url} alt={preview.name} className="max-h-[75vh] w-full object-contain" /> : <div className="grid min-h-52 place-items-center text-muted-foreground"><ImageIcon className="size-9" /></div>}</DialogContent></Dialog>
     </PageContainer>
   );
+}
+
+function NCSummaryTable({ actions, onPreview, onOpen, onReport }: { actions: MyAction[]; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="border-b bg-muted/15">
+        <CardTitle className="text-base">Non-compliance summary</CardTitle>
+        <p className="text-sm text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1480px] border-collapse text-left text-xs">
+            <thead className="bg-muted/45 text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr>{["Zone", "Observed", "Problem description", "Before", "Responsible", "Status", "Due date", "Action taken", "After", "Closed", "Report"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-4 py-3 font-semibold">{heading}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y">
+              {actions.length ? actions.map((action) => {
+                const before = action.issueEvidence?.find((item) => item.type === "image" && item.url);
+                const after = action.evidence.find((item) => item.type === "image" && item.url);
+                return <tr key={action.id} className="bg-card align-top transition-colors hover:bg-muted/20">
+                  <td className="whitespace-nowrap px-4 py-3 font-semibold">{action.area}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.createdAt)}</td>
+                  <td className="max-w-64 px-4 py-3"><button type="button" onClick={() => onOpen(action)} className="text-left font-medium hover:text-primary hover:underline">{action.originalFinding ?? action.description}</button></td>
+                  <td className="px-4 py-3"><EvidenceThumbnail evidence={before} onPreview={onPreview} /></td>
+                  <td className="whitespace-nowrap px-4 py-3">{action.responsiblePersonName ?? action.assignedTo}</td>
+                  <td className="whitespace-nowrap px-4 py-3"><ActionStatusBadge status={action.status} /></td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.dueDate)}</td>
+                  <td className="max-w-64 px-4 py-3 text-muted-foreground">{action.actionTakenDescription ?? action.resolutionObservation ?? "—"}</td>
+                  <td className="px-4 py-3"><EvidenceThumbnail evidence={after} onPreview={onPreview} /></td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.completedAt)}</td>
+                  <td className="px-4 py-3"><Button type="button" size="sm" variant="ghost" onClick={() => action.status === "Completed" ? onReport(action) : onOpen(action)}>{action.status === "Completed" ? "Report" : "View"}<ExternalLink className="size-3.5" /></Button></td>
+                </tr>;
+              }) : <tr><td colSpan={11} className="px-6 py-16 text-center text-sm text-muted-foreground">No non-compliances match the selected filters.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EvidenceThumbnail({ evidence, onPreview }: { evidence?: MyActionEvidence; onPreview: (evidence: MyActionEvidence) => void }) {
+  if (!evidence?.url) return <span className="grid size-12 place-items-center rounded-lg border bg-muted/30 text-muted-foreground"><ImageIcon className="size-4" /></span>;
+  return <button type="button" onClick={() => onPreview(evidence)} className="block size-12 overflow-hidden rounded-lg border transition hover:ring-2 hover:ring-primary/30"><img src={evidence.url} alt={evidence.name} className="size-full object-cover" /></button>;
+}
+
+function BeforeAfterView({ action, actions, onSelect, onPreview, onReport }: { action?: MyAction; actions: MyAction[]; onSelect: (id: string) => void; onPreview: (evidence: MyActionEvidence) => void; onReport: (action: MyAction) => void }) {
+  if (!action) return <Card><CardContent className="grid min-h-72 place-items-center text-sm text-muted-foreground">No non-compliance records are available for this view.</CardContent></Card>;
+  const before = action.issueEvidence?.find((item) => item.type === "image" && item.url);
+  const after = action.evidence.find((item) => item.type === "image" && item.url);
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="gap-4 border-b bg-muted/15 sm:flex-row sm:items-center sm:justify-between">
+        <div><CardTitle className="text-base">Before &amp; After</CardTitle><p className="mt-1 text-sm text-muted-foreground">Visual evidence and closure outcome for the selected non-compliance.</p></div>
+        <DashboardFilter value={action.id} onChange={onSelect} label="Select finding" options={actions.map((item) => item.id)} />
+      </CardHeader>
+      <CardContent className="space-y-5 p-4 sm:p-6">
+        <div className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          <DetailCell label="Zone" value={action.area} /><DetailCell label="Observed date" value={formatDashboardDate(action.createdAt)} /><DetailCell label="Responsible person" value={action.responsiblePersonName ?? action.assignedTo} /><DetailCell label="Status" value={action.status} />
+          <div className="bg-card p-4 sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Problem description</p><p className="mt-1.5 text-sm font-medium">{action.originalFinding ?? action.description}</p></div>
+          <div className="bg-card p-4 sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Action taken</p><p className="mt-1.5 text-sm font-medium">{action.actionTakenDescription ?? action.resolutionObservation ?? "Not recorded"}</p></div>
+        </div>
+        <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+          <BeforeAfterPanel label="Before photo" evidence={before} tone="before" onPreview={onPreview} />
+          <BeforeAfterPanel label="After photo" evidence={after} tone="after" onPreview={onPreview} />
+        </div>
+        {action.status === "Completed" && <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => onReport(action)}>Open improvement report<ExternalLink className="size-4" /></Button></div>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) { return <div className="bg-card p-4"><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1.5 text-sm font-semibold">{value}</p></div>; }
+
+function BeforeAfterPanel({ label, evidence, tone, onPreview }: { label: string; evidence?: MyActionEvidence; tone: "before" | "after"; onPreview: (evidence: MyActionEvidence) => void }) {
+  return <section className="min-w-0 overflow-hidden rounded-xl border bg-muted/15"><div className={`border-b px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider ${tone === "before" ? "bg-red-500/10 text-red-700 dark:text-red-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>{label}</div>{evidence?.url ? <button type="button" onClick={() => onPreview(evidence)} className="block aspect-[16/10] w-full overflow-hidden bg-muted"><img src={evidence.url} alt={evidence.name} className="size-full object-contain" /></button> : <div className="grid aspect-[16/10] place-items-center text-sm text-muted-foreground"><div className="text-center"><ImageIcon className="mx-auto mb-2 size-7" />No image attached</div></div>}</section>;
+}
+
+function DashboardKpi({ value, label, detail, tone = "neutral" }: { value: string | number; label: string; detail?: string; tone?: "neutral" | "danger" | "warning" | "success" | "info" }) {
+  const tones = {
+    neutral: "text-foreground",
+    danger: "text-red-600 dark:text-red-400",
+    warning: "text-amber-600 dark:text-amber-400",
+    success: "text-emerald-600 dark:text-emerald-400",
+    info: "text-primary",
+  };
+  return <Card className="min-w-0 gap-0"><CardContent className="flex min-h-28 flex-col items-center justify-center p-4 text-center xl:min-h-0 xl:flex-1"><p className={`max-w-full break-words text-2xl font-bold tracking-tight ${tones[tone]}`}>{value}</p><p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p>{detail && <p className="mt-1 text-[10px] text-muted-foreground">{detail}</p>}</CardContent></Card>;
 }
 
 function DashboardFilter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <Select value={value} onValueChange={(next)=>onChange(next ?? "All")}><SelectTrigger className="h-9 min-w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">{label}</SelectItem>{options.map((option)=><SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select>; }
@@ -538,9 +661,9 @@ function HealthGauge({ score }: { score: number }) { const color = score < 60 ? 
 
 function ExecutiveMetric({ label, value, detail, icon: Icon, tone }: { label: string; value: number; detail: string; icon: typeof AlertTriangle; tone: "danger" | "warning" | "success" | "info" }) { const tones = { danger: "bg-red-500/10 text-red-600 dark:text-red-400", warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400", success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", info: "bg-primary/10 text-primary" }; return <div className="flex min-h-32 flex-col justify-between gap-3 p-5"><div className={`grid size-8 place-items-center rounded-lg ${tones[tone]}`}><Icon className="size-4" /></div><div><p className="text-2xl font-bold tracking-tight">{value}</p><p className="text-sm font-semibold">{label}</p><p className="mt-0.5 text-xs text-muted-foreground">{detail}</p></div></div>; }
 
-function ZoneRanking({ data }: { data: Array<{ zone: string; score: number; leader: string }> }) { return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><CardTitle className="text-base">Zone Performance</CardTitle><p className="mt-1 text-xs text-muted-foreground">Ranked average audit score by zone.</p></CardHeader><CardContent className="space-y-4 p-5">{data.length ? data.map((zone,index)=><div key={zone.zone} className="grid grid-cols-[24px_1fr_auto] items-center gap-3"><span className="grid size-6 place-items-center rounded-full bg-muted text-[11px] font-bold">{index+1}</span><div className="min-w-0"><div className="flex justify-between gap-2 text-sm"><span className="font-semibold">{zone.zone}</span><span className="font-bold">{zone.score}%</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{width:`${zone.score}%`}} /></div><p className="mt-1 text-[11px] text-muted-foreground">{zone.leader}</p></div><span className="text-xs text-muted-foreground">{index === 0 ? "Top" : ""}</span></div>) : <p className="py-16 text-center text-sm text-muted-foreground">No zone scores available.</p>}</CardContent></Card>; }
+function ZoneRanking({ data }: { data: Array<{ zone: string; score: number; leader: string }> }) { const { t } = useI18n(); return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><CardTitle className="text-base">{t("dashboard.zonePerformance")}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{t("dashboard.auditScore")}</p></CardHeader><CardContent className="space-y-4 p-5">{data.length ? data.map((zone,index)=><div key={zone.zone} className="grid grid-cols-[24px_1fr_auto] items-center gap-3"><span className="grid size-6 place-items-center rounded-full bg-muted text-[11px] font-bold">{index+1}</span><div className="min-w-0"><div className="flex justify-between gap-2 text-sm"><span className="font-semibold">{zone.zone}</span><span className="font-bold">{zone.score}%</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{width:`${zone.score}%`}} /></div><p className="mt-1 text-[11px] text-muted-foreground">{zone.leader}</p></div></div>) : null}</CardContent></Card>; }
 
-function ActionHealth({ total, counts, closureRate, averageDays }: { total: number; counts: Record<string, number>; closureRate: number; averageDays: number }) { const rows = ["Assigned","In Progress","Pending Review","Rework Required","Overdue","Completed"]; return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><div className="flex items-start justify-between"><div><CardTitle className="text-base">Action Health</CardTitle><p className="mt-1 text-xs text-muted-foreground">Corrective-action workflow status.</p></div><div className="text-right"><p className="text-2xl font-bold">{total}</p><p className="text-[10px] uppercase text-muted-foreground">Total</p></div></div></CardHeader><CardContent className="p-5"><div className="space-y-2.5">{rows.map((status)=><div key={status} className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{status}</span><span className="font-semibold">{counts[status] ?? 0}</span></div>)}</div><div className="mt-4 grid grid-cols-2 gap-2 border-t pt-4"><div><p className="text-lg font-bold">{closureRate}%</p><p className="text-[10px] text-muted-foreground">Closure rate</p></div><div><p className="text-lg font-bold">{averageDays ? `${averageDays.toFixed(1)}d` : "—"}</p><p className="text-[10px] text-muted-foreground">Avg. closure</p></div></div></CardContent></Card>; }
+function ActionHealth({ total, counts, closureRate, averageDays }: { total: number; counts: Record<string, number>; closureRate: number; averageDays: number }) { const { t } = useI18n(); const rows = ["Assigned","In Progress","Pending Review","Rework Required","Overdue","Completed"]; return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><div className="flex items-start justify-between"><div><CardTitle className="text-base">{t("dashboard.actionHealth")}</CardTitle></div><div className="text-right"><p className="text-2xl font-bold">{total}</p><p className="text-[10px] uppercase text-muted-foreground">{t("dashboard.total")}</p></div></div></CardHeader><CardContent className="p-5"><div className="space-y-2.5">{rows.map((status)=><div key={status} className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{status}</span><span className="font-semibold">{counts[status] ?? 0}</span></div>)}</div><div className="mt-4 grid grid-cols-2 gap-2 border-t pt-4"><div><p className="text-lg font-bold">{closureRate}%</p><p className="text-[10px] text-muted-foreground">{t("dashboard.closureRate")}</p></div><div><p className="text-lg font-bold">{averageDays ? `${averageDays.toFixed(1)}d` : "—"}</p><p className="text-[10px] text-muted-foreground">{t("dashboard.averageClosure")}</p></div></div></CardContent></Card>; }
 
 function PriorityBadge({ priority }: { priority: MyAction["priority"] }) { return <Badge variant={priority === "Critical" || priority === "High" ? "danger" : priority === "Medium" ? "warning" : "info"}>{priority}</Badge>; }
 

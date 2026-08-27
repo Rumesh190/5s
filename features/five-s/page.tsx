@@ -19,6 +19,7 @@ import type {
   FiveSQuestion,
   FiveSSection,
 } from "./types/five-s";
+import { referenceFields } from "@/lib/five-s/reference-guides";
 
 /* =========================================================
    5S CHECKLIST
@@ -320,6 +321,7 @@ function createEmptyFiveSSections(): FiveSSection[] {
             observation: "",
             evidence: [],
             actionRequired: false,
+            ...referenceFields(section.category, questionIndex),
           })
         );
 

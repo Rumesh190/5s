@@ -13,6 +13,7 @@ import type {
 } from "@/features/five-s/types/my-actions";
 import { createNotification } from "@/lib/notifications/notification-store";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
+import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 export interface ActionActor {
   id: string;
@@ -78,7 +79,7 @@ function loadFromStorage() {
         if (canonicalDemo) {
           storedActions = [canonicalDemo, ...storedActions.filter((action) => ![canonicalDemo.id, "ACT-ZD-001"].includes(action.id))];
         }
-        window.localStorage.setItem(DEMO_FIXTURE_VERSION_KEY, DEMO_FIXTURE_VERSION);
+        safeSetStorageString(DEMO_FIXTURE_VERSION_KEY, DEMO_FIXTURE_VERSION);
       }
       const storedIds = new Set(storedActions.map((action) => action.id));
       const missingSeedActions = MY_ACTIONS.filter((action) => !storedIds.has(action.id));
@@ -101,17 +102,7 @@ function saveToStorage() {
     return;
   }
 
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(actions)
-    );
-  } catch (error) {
-    console.error(
-      "Failed to save actions to localStorage:",
-      error
-    );
-  }
+  return safeSetStorage(STORAGE_KEY, actions);
 }
 
 /** Preserve legacy arrays while making evidence purpose explicit. */

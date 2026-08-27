@@ -8,6 +8,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/preferences/use-i18n";
 import type { MyAction, MyActionActivity, MyActionEvidence } from "./types/my-actions";
 
 interface Props { action: MyAction; onBack: () => void; backLabel?: string }
@@ -19,6 +20,7 @@ const ACTIVITY_LABELS: Record<MyActionActivity["type"], string> = {
 };
 
 export default function FiveSActionReportPage({ action, onBack, backLabel = "Back to Actions" }: Props) {
+  const { t } = useI18n();
   const history = action.activityHistory ?? [];
   const assigned = history.find((event) => event.type === "assigned");
   const started = history.find((event) => event.type === "started");
@@ -56,9 +58,10 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
 
   return (
     <div className="action-report-page -m-5 min-h-screen bg-slate-100 p-4 text-slate-900 dark:bg-slate-950 dark:text-slate-100 sm:-m-6 sm:p-6 lg:-m-7 xl:-m-8">
+      <style>{`@media print { @page { size: A4 landscape; margin: 8mm; } }`}</style>
       <div className="action-report-controls mx-auto mb-4 flex max-w-[1180px] flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" onClick={onBack}><ArrowLeft className="size-4" /> {backLabel}</Button>
-        <Button onClick={handlePrint}><Printer className="size-4" /> Print / Save PDF</Button>
+        <Button onClick={handlePrint}><Printer className="size-4" /> {t("reports.savePdf")}</Button>
       </div>
 
       <article className="completed-action-report action-report-document mx-auto max-w-[1180px] overflow-hidden rounded-xl border border-blue-200 bg-white shadow-[0_18px_55px_-42px_rgba(30,64,175,0.45)] dark:border-slate-700 dark:bg-slate-900">
@@ -69,24 +72,24 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
 
           <section className="action-report-block rounded-lg border border-blue-100 bg-blue-50/[0.12] p-3 dark:border-slate-700 dark:bg-slate-900">
             <div className="improvement-comparison grid gap-3 lg:grid-cols-[minmax(0,2fr)_44px_minmax(170px,1fr)_44px_minmax(0,2fr)] lg:items-center">
-              <EvidencePanel tone="before" label="Not Good (Before)" evidence={action.issueEvidence ?? []} description={beforeText} empty="No original evidence captured" />
+              <EvidencePanel tone="before" label={t("actionReport.before")} evidence={action.issueEvidence ?? []} description={beforeText} empty="No original evidence captured" />
               <DirectionArrow />
               <CompletedByPanel name={responsible} department={action.department} zone={action.area} completedAt={completedAt} photo={responsiblePhoto} />
               <DirectionArrow />
-              <EvidencePanel tone="after" label="Good (After)" evidence={action.evidence} description={afterText} empty="No completion evidence captured" />
+              <EvidencePanel tone="after" label={t("actionReport.after")} evidence={action.evidence} description={afterText} empty="No completion evidence captured" />
             </div>
           </section>
 
           <section className="action-report-block">
             <div className="improvement-details grid gap-3 md:grid-cols-3">
-              <DetailCard icon={Flag} title="Original Finding" text={action.originalFinding ?? action.description} />
-              <DetailCard icon={ClipboardCheck} title="Corrective Action" text={action.description} />
-              <DetailCard icon={Sparkles} title="Improvement Result / Remarks" text={result} />
+              <DetailCard icon={Flag} title={t("actionReport.originalFinding")} text={action.originalFinding ?? action.description} />
+              <DetailCard icon={ClipboardCheck} title={t("actionReport.correctiveAction")} text={action.description} />
+              <DetailCard icon={Sparkles} title={t("actionReport.result")} text={result} />
             </div>
           </section>
 
-          <section className="action-report-block rounded-lg border border-blue-200 bg-blue-50/[0.16] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
-            <SectionTitle>Action Timeline</SectionTitle>
+          <section className="action-report-timeline action-report-block rounded-lg border border-blue-200 bg-blue-50/[0.16] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
+            <SectionTitle>{t("actionReport.timeline")}</SectionTitle>
             <div className="timeline-scroll overflow-x-auto">
               <div className="action-timeline relative grid min-w-[720px] grid-cols-5 pt-1">
                 <span className="absolute left-[10%] right-[10%] top-5 h-0.5 bg-blue-400 dark:bg-blue-800" aria-hidden="true" />
@@ -96,13 +99,13 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
           </section>
 
           <section className="report-signoff action-report-block grid overflow-hidden rounded-lg border border-blue-100 bg-white lg:grid-cols-[1fr_1fr_2fr] lg:divide-x lg:divide-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:lg:divide-slate-700">
-            <ApprovalPanel title="Prepared By (Completed By)" name={responsible} role={`${action.department} • ${action.area}`} date={completedAt} photo={responsiblePhoto} />
-            <ApprovalPanel title="Reviewed & Approved By" name={approver} role="Auditor" date={action.reviewedAt ?? completedAt} photo={approverPhoto} />
+            <ApprovalPanel title={t("actionReport.preparedBy")} name={responsible} role={`${action.department} • ${action.area}`} date={completedAt} photo={responsiblePhoto} />
+            <ApprovalPanel title={t("actionReport.approvedBy")} name={approver} role={t("audit.auditor")} date={action.reviewedAt ?? completedAt} photo={approverPhoto} />
             <ReviewHistory history={history} reviewedAt={action.reviewedAt} reviewedBy={action.reviewedBy ?? action.auditor} />
           </section>
 
           <footer className="action-report-block flex items-center justify-center gap-3 rounded-lg border border-blue-100 bg-gradient-to-r from-blue-50 via-sky-50 to-blue-50 px-4 py-3 text-blue-800 dark:border-blue-900/60 dark:from-blue-950/40 dark:via-slate-900 dark:to-blue-950/40 dark:text-blue-200">
-            <ShieldCheck className="size-5 shrink-0 text-blue-600" /><p className="text-xs font-semibold">This improvement has been verified and approved.</p><span className="hidden text-[10px] font-medium text-blue-600/70 sm:inline">Report Generated {generatedAt}</span>
+            <ShieldCheck className="size-5 shrink-0 text-blue-600" /><p className="text-xs font-semibold">{t("actionReport.verified")}</p><span className="hidden text-[10px] font-medium text-blue-600/70 sm:inline">{t("reports.reportGenerated")} {generatedAt}</span>
           </footer>
         </div>
       </article>
@@ -111,7 +114,8 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
 }
 
 function ReportHeader({ action, generatedAt }: { action: MyAction; generatedAt: string }) {
-  return <header className="report-header action-report-block relative border-b border-blue-100 bg-gradient-to-b from-blue-50/60 to-white px-4 py-5 text-center dark:border-slate-700 dark:from-blue-950/25 dark:to-slate-900 sm:px-7"><div className="mb-3 flex justify-center sm:absolute sm:right-5 sm:top-4 sm:mb-0"><Badge variant="success" className="border-green-300 bg-green-50 px-3 py-1 text-green-700 uppercase tracking-wide shadow-none dark:border-green-800 dark:bg-green-950/40 dark:text-green-300"><CheckCircle2 className="size-3.5" /> Completed</Badge></div><p className="text-xl font-extrabold uppercase tracking-[0.04em] text-blue-800 dark:text-blue-300 sm:text-[30px] sm:tracking-[0.055em]">5S Improvement Report</p><div className="mt-2 flex min-w-0 flex-wrap justify-center gap-x-8 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span className="break-all"><strong className="text-blue-800 dark:text-blue-300">Improvement No:</strong> {action.id}</span><span><strong>Report Generated:</strong> {generatedAt}</span></div><h1 className="mx-auto mt-3 max-w-4xl break-words text-lg font-extrabold tracking-tight text-slate-950 dark:text-white sm:px-16 sm:text-[25px]">{action.title}</h1></header>;
+  const { t } = useI18n();
+  return <header className="report-header action-report-block relative border-b border-blue-100 bg-gradient-to-b from-blue-50/60 to-white px-4 py-5 text-center dark:border-slate-700 dark:from-blue-950/25 dark:to-slate-900 sm:px-7"><div className="mb-3 flex justify-center sm:absolute sm:right-5 sm:top-4 sm:mb-0"><Badge variant="success" className="border-green-300 bg-green-50 px-3 py-1 text-green-700 uppercase tracking-wide shadow-none dark:border-green-800 dark:bg-green-950/40 dark:text-green-300"><CheckCircle2 className="size-3.5" /> {t("common.completed")}</Badge></div><p className="text-xl font-extrabold uppercase tracking-[0.04em] text-blue-800 dark:text-blue-300 sm:text-[30px] sm:tracking-[0.055em]">{t("actionReport.title")}</p><div className="mt-2 flex min-w-0 flex-wrap justify-center gap-x-8 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span className="break-all"><strong className="text-blue-800 dark:text-blue-300">{t("actionReport.improvementNumber")}:</strong> {action.id}</span><span><strong>{t("reports.reportGenerated")}:</strong> {generatedAt}</span></div><h1 className="mx-auto mt-3 max-w-4xl break-words text-lg font-extrabold tracking-tight text-slate-950 dark:text-white sm:px-16 sm:text-[25px]">{action.title}</h1></header>;
 }
 
 function ReportMetadata({ action, completedAt }: { action: MyAction; completedAt?: string }) {

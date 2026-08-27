@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useActionStore } from "@/lib/actions/action-store";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
 import { useFiveSAuditStore } from "@/lib/five-s/audit-store";
+import { useI18n } from "@/components/preferences/use-i18n";
 import type { FiveSEvidence, FiveSQuestion } from "../types/five-s";
 import type { MyAction } from "../types/my-actions";
 
@@ -23,11 +24,11 @@ const SCORE_STYLES: Record<number, string> = {
   2: "border-green-300 bg-green-50 text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-300",
 };
 
-function formatDateTime(value?: string) {
+function formatDateTime(value?: string, locale = "en-IN") {
   if (!value) return null;
   const date = new Date(value.includes("T") ? value : `${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-IN", {
+  return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -72,10 +73,11 @@ function EvidenceItem({ evidence }: { evidence: FiveSEvidence | NonNullable<MyAc
 }
 
 export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditId: string; origin?: string; returnTo?: string }) {
+  const { locale, t } = useI18n();
   const router = useRouter();
   const reportsOrigin = origin === "reports-audit";
   const backDestination = reportsOrigin && returnTo?.startsWith("/5s/reports") ? returnTo : "/5s/audits";
-  const backLabel = reportsOrigin ? "Back to Audit Reports" : "Back to Audits";
+  const backLabel = reportsOrigin ? t("reports.backAuditReports") : t("reports.backAudits");
   const audits = useFiveSAuditStore();
   const allActions = useActionStore();
   const audit = audits.find((item) => item.id === auditId);
@@ -94,7 +96,9 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
   const questions = audit.sections.flatMap((section) => section.questions);
   const completedQuestions = questions.filter((question) => question.score !== null).length;
   const actions = allActions.filter((action) =>
-    action.auditId ? action.auditId === audit.id : action.sourceTitle === audit.title
+    action.auditId === audit.id ||
+    action.auditId === audit.title ||
+    action.sourceTitle === audit.title
   );
   const evidence = audit.sections.flatMap((section) =>
     section.questions.flatMap((question) =>
@@ -103,17 +107,27 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
   );
   const scorePercent = percentage(audit.score, audit.maxScore);
   const displayStatus = audit.status === "Completed" ? "Completed" : completedQuestions === questions.length ? "Ready for Completion" : audit.status;
-  const generatedAt = formatDateTime(new Date().toISOString());
+  const generatedAt = formatDateTime(new Date().toISOString(), locale);
   const zoneLeader = getFiveSZoneConfiguration(audit.area)?.leader;
   const actionCounts = {
-    open: actions.filter((action) => action.status === "Open").length,
-    inProgress: actions.filter((action) => action.status === "In Progress" || action.status === "Awaiting Review").length,
-    completed: actions.filter((action) => action.status === "Completed").length,
+    open: actions.filter((action) => ["Awaiting Assignment", "Assigned", "Open"].includes(action.status)).length,
+    inProgress: actions.filter((action) => action.status === "In Progress").length,
+    pendingReview: actions.filter((action) => ["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status)).length,
+    rework: actions.filter((action) => action.status === "Rework Required").length,
     overdue: actions.filter((action) => action.status === "Overdue").length,
+    closed: actions.filter((action) => action.status === "Completed").length,
   };
   const totalCostSaving = actions
     .filter((action) => action.status === "Completed")
     .reduce((total, action) => total + (Number.isFinite(action.costSaving) ? action.costSaving ?? 0 : 0), 0);
+
+  async function handlePrint() {
+    await document.fonts?.ready;
+    const report = document.querySelector<HTMLElement>(".audit-report-document");
+    const images = report ? Array.from(report.querySelectorAll("img")) : [];
+    await Promise.all(images.map(async (image) => { if (image.complete) return; try { await image.decode(); } catch { /* Keep the report printable if optional evidence fails. */ } }));
+    window.print();
+  }
 
   return (
     <div className="audit-report-page -m-5 min-h-screen bg-slate-100 p-4 text-slate-950 dark:bg-slate-950 dark:text-slate-100 sm:-m-6 sm:p-6 lg:-m-7 xl:-m-8">
@@ -121,33 +135,37 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
         <Button variant="ghost" onClick={() => router.push(backDestination)}>
           <ArrowLeft className="size-4" /> {backLabel}
         </Button>
-        <Button onClick={() => window.print()}>
-          <Printer className="size-4" /> Print / Save PDF
+        <Button onClick={handlePrint}>
+          <Printer className="size-4" /> {t("reports.savePdf")}
         </Button>
       </div>
 
       <article className="audit-report-document mx-auto min-w-0 max-w-[1120px] space-y-5 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:space-y-7 sm:p-8">
         <header className="flex flex-col justify-between gap-5 border-b-2 border-slate-900 pb-5 dark:border-slate-200 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-bold tracking-[0.18em] text-primary">5S AUDIT REPORT</p>
+            <p className="text-xs font-bold tracking-[0.18em] text-primary">{t("reports.auditReport")}</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight">{audit.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{audit.plant} · {audit.area}</p>
           </div>
           <div className="text-left text-xs text-muted-foreground sm:text-right">
-            <p>Report Generated</p>
+            <p>{t("reports.reportGenerated")}</p>
             <p className="mt-1 font-medium text-foreground">{generatedAt}</p>
           </div>
         </header>
 
-        <ReportSection title="Audit Summary">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <ReportSection title={t("reports.auditSummary")}>
+          <div className="audit-summary-grid grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
             {[
               [`${completedQuestions} / ${questions.length}`, "Questions"],
               [`${audit.score} / ${audit.maxScore}`, "Total Score"],
               [`${scorePercent}%`, "Compliance"],
               [String(actions.length), "Actions"],
               [String(actionCounts.open), "Open"],
-              [String(actionCounts.completed), "Completed"],
+              [String(actionCounts.inProgress), "In Progress"],
+              [String(actionCounts.pendingReview), "Pending Review"],
+              [String(actionCounts.rework), "Rework"],
+              [String(actionCounts.overdue), "Overdue"],
+              [String(actionCounts.closed), "Closed"],
               [String(evidence.length), "Evidence"],
               [`₹${totalCostSaving.toLocaleString("en-IN")}`, "Cost Saving"],
             ].map(([value, label]) => (
@@ -159,13 +177,13 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           </div>
         </ReportSection>
 
-        <ReportSection title="Audit Details">
-          <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <ReportSection title={t("reports.auditDetails")}>
+          <dl className="audit-details-grid grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             {[
               ["Plant", audit.plant], ["Zone", audit.area], ["Zone Leader", zoneLeader],
               ["Auditor", audit.auditor], ["Status", displayStatus],
-              ["Started", formatDateTime(audit.startedAt)], ["Completed", formatDateTime(audit.completedAt)],
-              ["Due Date", formatDateTime(audit.dueDate)],
+              [t("common.started"), formatDateTime(audit.startedAt, locale)], [t("common.completed"), formatDateTime(audit.completedAt, locale)],
+              [t("audit.dueDate"), formatDateTime(audit.dueDate, locale)],
             ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
               <div key={label} className="audit-report-block">
                 <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
@@ -175,8 +193,8 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           </dl>
         </ReportSection>
 
-        <ReportSection title="Overall Performance">
-          <div className="audit-report-block flex flex-col gap-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
+        <ReportSection title={t("reports.overallPerformance")}>
+          <div className="audit-performance-row audit-report-block flex flex-col gap-4 rounded-lg border border-slate-200 p-4 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
             <div><p className="text-3xl font-bold tabular-nums">{scorePercent}%</p><p className="text-sm text-muted-foreground">Overall Compliance</p></div>
             <p className="text-xl font-semibold tabular-nums">{audit.score} / {audit.maxScore}</p>
             <div className="flex flex-wrap gap-2">
@@ -185,7 +203,7 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           </div>
         </ReportSection>
 
-        <ReportSection title="5S Section Performance">
+        <ReportSection title={t("reports.sectionPerformance")}>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-xs">
               <thead><tr className="border-b border-slate-300 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -203,11 +221,16 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           </div>
         </ReportSection>
 
-        <ReportSection title="Corrective Actions">
+        <ReportSection title={t("reports.correctiveActions")}>
           <div className="mb-3 flex flex-wrap gap-2 text-xs">
-            <Badge variant="outline">Open {actionCounts.open}</Badge><Badge variant="outline">In Progress {actionCounts.inProgress}</Badge><Badge variant="outline">Completed {actionCounts.completed}</Badge><Badge variant="outline">Overdue {actionCounts.overdue}</Badge>
+            <Badge variant="outline">Open {actionCounts.open}</Badge>
+            <Badge variant="outline">In Progress {actionCounts.inProgress}</Badge>
+            <Badge variant="outline">Pending Review {actionCounts.pendingReview}</Badge>
+            <Badge variant="outline">Rework {actionCounts.rework}</Badge>
+            <Badge variant="outline">Overdue {actionCounts.overdue}</Badge>
+            <Badge variant="outline">Closed {actionCounts.closed}</Badge>
           </div>
-          {actions.length ? <div className="grid gap-3 md:grid-cols-2">{actions.map((action) => {
+          {actions.length ? <div className="audit-actions-grid grid gap-3 md:grid-cols-2">{actions.map((action) => {
             const relatedQuestion = questions.find((question) => question.actionId === action.id);
             return <article key={action.id} className="audit-report-block rounded-lg border border-slate-200 p-4 dark:border-slate-700">
               <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-muted-foreground">{action.id}</p><h3 className="mt-1 text-sm font-semibold">{action.title}</h3></div><Badge variant="outline">{action.status}</Badge></div>
@@ -216,10 +239,10 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
                 <div><dt className="text-muted-foreground">Category</dt><dd className="font-medium">{action.actionCategory ?? action.category ?? "—"}</dd></div>
                 <div><dt className="text-muted-foreground">Priority</dt><dd className="font-medium">{action.priority}</dd></div>
                 <div><dt className="text-muted-foreground">Responsible Person</dt><dd className="font-medium">{action.responsiblePersonName ?? action.assignedTo}</dd></div>
-                <div><dt className="text-muted-foreground">Due</dt><dd className="font-medium">{formatDateTime(action.dueDate)}</dd></div>
+                <div><dt className="text-muted-foreground">{t("audit.due")}</dt><dd className="font-medium">{formatDateTime(action.dueDate, locale)}</dd></div>
                 <div><dt className="text-muted-foreground">Cost Saving</dt><dd className="font-medium">₹{(action.costSaving ?? 0).toLocaleString("en-IN")}</dd></div>
                 <div><dt className="text-muted-foreground">5S Section</dt><dd className="font-medium">{action.category ?? "—"}</dd></div>
-                <div><dt className="text-muted-foreground">Created</dt><dd className="font-medium">{formatDateTime(action.createdAt)}</dd></div>
+                <div><dt className="text-muted-foreground">{t("common.created")}</dt><dd className="font-medium">{formatDateTime(action.createdAt, locale)}</dd></div>
               </dl>
               {relatedQuestion && <p className="mt-3 border-t border-slate-200 pt-3 text-xs dark:border-slate-700"><span className="text-muted-foreground">Finding:</span> {relatedQuestion.observation || relatedQuestion.question}</p>}
               {[...(action.issueEvidence ?? []), ...action.evidence].length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{[...(action.issueEvidence ?? []), ...action.evidence].map((item) => <EvidenceItem key={item.id} evidence={item} />)}</div>}
@@ -237,10 +260,18 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           ))}</div>
         </ReportSection>
 
-        {evidence.length > 0 && <ReportSection title="Evidence">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{evidence.map(({ section, question, item }) => (
+        {evidence.length > 0 && <ReportSection title={t("audit.evidence")}>
+          <div className="audit-evidence-grid grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{evidence.map(({ section, question, item }) => (
             <div key={item.id} className="audit-report-block"><p className="mb-1.5 text-[10px] font-semibold uppercase text-muted-foreground">{section} · {question.id}</p><EvidenceItem evidence={item} /></div>
           ))}</div>
+        </ReportSection>}
+
+        {audit.auditorSignature && <ReportSection title={t("signature.title")}>
+          <div className="audit-report-block grid items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50 sm:grid-cols-[1fr_260px_1fr]">
+            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Signed By</p><p className="mt-1 text-sm font-semibold">{audit.auditorSignature.userName}</p><p className="mt-1 text-xs text-muted-foreground">Auditor</p></div>
+            <img src={audit.auditorSignature.signatureImage} alt={`${audit.auditorSignature.userName} auditor signature`} className="h-24 w-full rounded-md border bg-white object-contain p-2" />
+            <div className="sm:text-right"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("signature.signedOn")}</p><p className="mt-1 text-sm font-semibold">{formatDateTime(audit.auditorSignature.signedAt, locale)}</p></div>
+          </div>
         </ReportSection>}
 
         <footer className="audit-report-footer border-t border-slate-200 pt-4 text-[10px] text-muted-foreground dark:border-slate-700">

@@ -78,24 +78,161 @@
 }
 
 @media print {
-  @page {
-    size: A6 portrait;
-    margin: 0;
+  html:has(.red-tag-print-page),
+  body:has(.red-tag-print-page) {
+    background: white !important;
   }
 
   body:has(.red-tag-print-page) * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
 
-  body:has(.red-tag-print-page) .red-tag-label,
-  body:has(.red-tag-print-page) .red-tag-label * {
-    visibility: visible;
+  body:has(.red-tag-print-page) .red-tag-print-page,
+  body:has(.red-tag-print-page) .red-tag-print-page * {
+    visibility: visible !important;
   }
 
-  body:has(.red-tag-print-page) .red-tag-label {
+  body:has(.red-tag-print-page) .red-tag-print-page {
+    display: grid !important;
     position: fixed;
     inset: 0;
-    height: 150mm;
+    place-items: start center;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .red-tag-print-surface {
+    display: grid !important;
+    width: 100% !important;
+    place-items: start center !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  .red-tag-print-surface .red-tag-label {
+    width: 105mm !important;
+    max-width: 105mm !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 auto !important;
+    border-color: #b91c1c !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
+/* Continuous Improvement mobile workflow */
+@media (max-width: 639px) {
+  body:has(.ci-create-body) [data-slot="page-header"] {
+    gap: 0.75rem;
+  }
+
+  body:has(.ci-create-body) [data-slot="page-header"] > div:last-child {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  body:has(.ci-create-body) [data-slot="page-header"] > div:last-child > button {
+    min-width: 0;
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  .ci-create-body {
+    min-width: 0;
+    padding-inline: 0 !important;
+  }
+
+  .ci-create-body > [class*="rounded-xl"] {
+    min-width: 0;
+  }
+
+  .ci-create-body [data-slot="card-content"] {
+    padding: 1rem !important;
+  }
+
+  .ci-create-body input,
+  .ci-create-body button,
+  .ci-create-body [role="combobox"] {
+    min-height: 44px;
+  }
+
+  .ci-create-body .motion-attachment-in {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) 44px;
+  }
+
+  .ci-create-body .motion-attachment-in > button:nth-of-type(1) {
+    grid-row: span 2;
+  }
+
+  .ci-create-body .motion-attachment-in > p {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .ci-create-body .motion-attachment-in > button:nth-of-type(2) {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .ci-create-body .motion-attachment-in > button:last-child {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .ci-story button {
+    min-height: 44px;
+  }
+
+  .ci-story textarea,
+  .ci-story input,
+  .ci-story [role="combobox"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .ci-story img {
+    max-width: 100%;
+  }
+
+  .ci-report {
+    border-radius: 0.75rem !important;
+  }
+
+  .ci-report > header {
+    padding: 1.25rem !important;
+  }
+
+  .ci-report > header h1 {
+    overflow-wrap: anywhere;
+    font-size: 1.5rem !important;
+    line-height: 1.25 !important;
+  }
+
+  .ci-report > div {
+    padding: 1rem !important;
+  }
+}
+
+@media (max-width: 340px) {
+  body:has(.ci-create-body) [data-slot="page-header"] > div:last-child {
+    grid-template-columns: 1fr;
+  }
+
+  .ci-create-body [class*="grid-cols-[minmax(0,1fr)_120px]"] {
+    grid-template-columns: minmax(0, 1fr) 104px !important;
   }
 }
 
@@ -402,7 +539,8 @@ html[data-accent] {
     @apply font-sans;
   }
 
-  body {
+body {
+  font-family: var(--font-geist-sans), "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Bengali", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
     @apply bg-background text-foreground;
 
     line-height: 1.5;
@@ -522,14 +660,46 @@ html[data-accent] {
   }
 
   .audit-report-document {
+    box-sizing: border-box;
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
+    padding: 8mm;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
     background: white !important;
     box-shadow: none;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .audit-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .audit-details-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .audit-performance-row {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .audit-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .audit-evidence-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .audit-summary-grid > *,
+  .audit-details-grid > *,
+  .audit-actions-grid > *,
+  .audit-evidence-grid > * {
+    min-width: 0 !important;
   }
 
   .audit-report-section,
@@ -563,6 +733,53 @@ html[data-accent] {
    COMPLETED ACTION IMPROVEMENT REPORT PRINTING
    ========================================================= */
 
+/* =========================================================
+   CONTINUOUS IMPROVEMENT REPORT PRINTING
+   ========================================================= */
+
+@media print {
+  body:has(.ci-report) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.ci-report) .ci-report,
+  body:has(.ci-report) .ci-report * {
+    visibility: visible !important;
+  }
+
+  body:has(.ci-report) .ci-report {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: white !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body:has(.ci-report) .ci-report img {
+    max-width: 100% !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body:has(.ci-report) .ci-report section,
+  body:has(.ci-report) .ci-report header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
 @page action-improvement-report {
   size: A4 landscape;
   margin: 10mm;
@@ -591,6 +808,12 @@ html[data-accent] {
   }
 
   .action-report-controls {
+    display: none !important;
+  }
+
+  /* The timeline is useful in-app, but the board-ready achievement printout
+     prioritizes the result, before/after evidence, and sign-off. */
+  .action-report-timeline {
     display: none !important;
   }
 
@@ -626,7 +849,7 @@ html[data-accent] {
   .completed-action-report * {
     box-sizing: border-box;
     min-width: 0;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
   }
 
   .completed-action-report {
@@ -677,6 +900,8 @@ html[data-accent] {
   .metadata-primary p,
   .metadata-secondary p {
     white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
   }
 
   .improvement-comparison {
@@ -715,6 +940,12 @@ html[data-accent] {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 8px !important;
+    background: white !important;
+  }
+
+  .improvement-details > * {
+    border-width: 1px !important;
+    box-shadow: none !important;
   }
 
   .timeline-scroll {
@@ -731,6 +962,7 @@ html[data-accent] {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) !important;
     overflow: visible !important;
+    background: white !important;
   }
 
   .report-signoff > * {

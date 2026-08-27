@@ -5,6 +5,7 @@ import {
   FiveSQuestion,
   FiveSSection,
 } from "../types/five-s";
+import { referenceFields } from "@/lib/five-s/reference-guides";
 
 export const FIVE_S_CATEGORIES: FiveSCategory[] = [
   "Sort",
@@ -62,6 +63,7 @@ function createQuestion(
       options?.actionRequired ?? false,
     actionId: options?.actionId,
     evidence: [],
+    ...referenceFields(category, Math.max(0, Number(id.match(/(\d+)$/)?.[1] ?? 1) - 1)),
   };
 }
 

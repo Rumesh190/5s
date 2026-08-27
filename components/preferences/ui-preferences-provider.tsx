@@ -6,6 +6,7 @@ import {
   DEFAULT_UI_PREFERENCES,
   UI_PREFERENCES_STORAGE_KEY,
   type AccentColor,
+  type AppLanguage,
   type NavigationPosition,
   type UiPreferences,
 } from "@/lib/ui-preferences"
@@ -13,6 +14,7 @@ import {
 interface UiPreferencesContextValue extends UiPreferences {
   setNavigationPosition: (position: NavigationPosition) => void
   setAccentColor: (color: AccentColor) => void
+  setLanguage: (language: AppLanguage) => void
 }
 
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | null>(null)
@@ -20,6 +22,8 @@ const UiPreferencesContext = React.createContext<UiPreferencesContextValue | nul
 function applyPreferences(preferences: UiPreferences) {
   document.documentElement.dataset.navigation = preferences.navigationPosition
   document.documentElement.dataset.accent = preferences.accentColor
+  document.documentElement.lang = preferences.language
+  document.documentElement.dataset.language = preferences.language
 }
 
 function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
@@ -29,10 +33,12 @@ function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
     const root = document.documentElement
     const navigationPosition = root.dataset.navigation as NavigationPosition | undefined
     const accentColor = root.dataset.accent as AccentColor | undefined
+    const language = root.dataset.language as AppLanguage | undefined
 
     return {
       navigationPosition: navigationPosition ?? DEFAULT_UI_PREFERENCES.navigationPosition,
       accentColor: accentColor ?? DEFAULT_UI_PREFERENCES.accentColor,
+      language: language ?? DEFAULT_UI_PREFERENCES.language,
     }
   })
 
@@ -48,6 +54,8 @@ function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
       updatePreferences({ ...preferences, navigationPosition }),
     setAccentColor: (accentColor) =>
       updatePreferences({ ...preferences, accentColor }),
+    setLanguage: (language) =>
+      updatePreferences({ ...preferences, language }),
   }), [preferences])
 
   return (

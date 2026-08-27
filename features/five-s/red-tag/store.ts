@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import type { DemoUser } from "@/lib/current-user";
 import type { RedTag } from "./types";
+import { safeSetStorage, STORAGE_FULL_MESSAGE } from "@/lib/browser-storage";
 
 const KEY = "five-s-red-tags-v1";
 const DEMO_TAG: RedTag = {
@@ -30,7 +31,8 @@ function load() {
   } catch { /* retain demo data */ }
 }
 function emit() {
-  window.localStorage.setItem(KEY, JSON.stringify(tags));
+  const result = safeSetStorage(KEY, tags);
+  if (!result.success) { window.alert(result.reason === "quota" ? STORAGE_FULL_MESSAGE : result.message); return; }
   listeners.forEach((listener) => listener());
 }
 function subscribe(listener: () => void) { load(); listeners.add(listener); return () => listeners.delete(listener); }

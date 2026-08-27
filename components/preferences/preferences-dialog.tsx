@@ -14,6 +14,8 @@ import {
   useUiPreferences,
 } from "@/components/preferences/ui-preferences-provider"
 import type { AccentColor, NavigationPosition } from "@/lib/ui-preferences"
+import { LANGUAGE_OPTIONS } from "@/lib/i18n"
+import { useI18n } from "@/components/preferences/use-i18n"
 
 const ACCENTS: Array<{ value: AccentColor; label: string; color: string }> = [
   { value: "indigo", label: "Indigo", color: "oklch(0.55 0.22 272)" },
@@ -26,10 +28,11 @@ const ACCENTS: Array<{ value: AccentColor; label: string; color: string }> = [
 
 function PreferencesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { navigationPosition, accentColor, setNavigationPosition, setAccentColor } = useUiPreferences()
+  const { language, setLanguage, t } = useI18n()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-6 sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-5 sm:max-w-md sm:gap-6">
         <DialogHeader>
           <DialogTitle className="text-lg">Appearance</DialogTitle>
           <DialogDescription>Personalize how the 5S workspace looks on this device.</DialogDescription>
@@ -66,8 +69,15 @@ function PreferencesDialog({ open, onOpenChange }: { open: boolean; onOpenChange
         </fieldset>
 
         <fieldset className="space-y-3">
+          <legend className="text-sm font-semibold">{t("language")}</legend>
+          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t("language")}>
+            {LANGUAGE_OPTIONS.map((option) => <button key={option.code} type="button" role="radio" aria-checked={language === option.code} onClick={() => setLanguage(option.code)} lang={option.code} className={cn("flex items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", language === option.code ? "border-primary bg-primary/7" : "border-border/80")}>{option.name}{language === option.code && <Check className="size-4 text-primary" />}</button>)}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-3">
           <legend className="text-sm font-semibold">Accent color</legend>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Product accent color">
+          <div className="grid grid-cols-2 gap-2 min-[390px]:grid-cols-3" role="radiogroup" aria-label="Product accent color">
             {ACCENTS.map((accent) => {
               const selected = accentColor === accent.value
               return (

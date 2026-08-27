@@ -1,6 +1,10 @@
+"use client";
+
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/preferences/use-i18n";
+import { systemTitleKey } from "@/lib/i18n";
 
 interface FiveSPageHeaderProps {
   eyebrow?: string;
@@ -23,6 +27,8 @@ export default function FiveSPageHeader({
   children,
   className,
 }: FiveSPageHeaderProps) {
+  const { t } = useI18n();
+  const translatedTitleKey = systemTitleKey(title);
   return (
     <header
       className={cn(
@@ -41,7 +47,7 @@ export default function FiveSPageHeader({
           )}
 
           <h1 className={cn("font-heading text-2xl font-semibold leading-tight tracking-[-0.025em] text-foreground", eyebrow && "mt-1")}>
-            {title}
+            {translatedTitleKey ? t(translatedTitleKey) : title}
           </h1>
 
           <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">

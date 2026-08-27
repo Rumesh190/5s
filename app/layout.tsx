@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PreferencesInitScript } from "@/components/preferences/preferences-init-script";
 import { UiPreferencesProvider } from "@/components/preferences/ui-preferences-provider";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <PreferencesInitScript />
-        <UiPreferencesProvider>{children}</UiPreferencesProvider>
+        <UiPreferencesProvider><AuthProvider>{children}</AuthProvider></UiPreferencesProvider>
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,10 +11,11 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowLeft,
-  ArrowRight,
   Camera,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Eye,
   FileText,
@@ -44,7 +46,6 @@ import {
 import {
   Card,
   CardContent,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -66,6 +67,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import FiveSPageHeader from "./FiveSPageHeader";
+import AuditorSignaturePad from "./AuditorSignaturePad";
+import FiveSReferenceGuide from "./FiveSReferenceGuide";
+import { useI18n } from "@/components/preferences/use-i18n";
+import { auditQuestionText, auditSectionDescription, auditSectionName } from "@/lib/audit-question-translations";
+import { referenceFields } from "@/lib/five-s/reference-guides";
+import { optimizeEvidenceImage, MAX_EVIDENCE_IMAGES } from "@/lib/evidence-images";
 
 import { createAction, getActionById, updateAction } from "@/lib/actions/action-store";
 import { updateFiveSAudit } from "@/lib/five-s/audit-store";
@@ -174,6 +181,31 @@ const SCORE_INDICATOR_STYLES: Record<number, string> = {
   2: "border-green-300 bg-green-50 text-green-700 dark:border-green-500/35 dark:bg-green-500/10 dark:text-green-300",
 };
 
+const AUDIT_LIFECYCLE = ["Started", "In Progress", "Draft", "Completed"];
+
+function AuditLifecycleTimeline({ currentIndex }: { currentIndex: number }) {
+  const { t } = useI18n();
+  const labels = [t("common.started"), t("common.inProgress"), t("common.draft"), t("common.completed")];
+  return (
+    <div className="grid grid-cols-4 gap-1 lg:grid-cols-1 lg:gap-0" aria-label="Audit lifecycle">
+      {labels.map((label, index) => {
+        const complete = index < currentIndex;
+        const current = index === currentIndex;
+
+        return (
+          <div key={label} className="relative flex min-w-0 flex-col items-center gap-1 pb-1 text-center lg:flex-row lg:items-start lg:gap-2 lg:pb-3 lg:text-left">
+            <span className={`relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border text-[9px] ${complete ? "border-emerald-500 bg-emerald-500 text-white" : current ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}>
+              {complete ? <Check className="size-3" /> : index + 1}
+            </span>
+            {index < AUDIT_LIFECYCLE.length - 1 && <span className={`absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px ${index < currentIndex ? "bg-emerald-400" : "bg-border"} lg:bottom-0 lg:left-[9px] lg:right-auto lg:top-5 lg:h-auto lg:w-px`} />}
+            <span className={`min-w-0 text-[9px] leading-3 lg:pt-0.5 lg:text-[11px] lg:leading-4 ${current ? "font-semibold text-primary" : complete ? "font-medium text-foreground" : "text-muted-foreground"}`}>{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function formatEvidenceSize(size: number) {
   if (size < 1024 * 1024) {
     return `${Math.max(1, Math.round(size / 1024))} KB`;
@@ -260,6 +292,7 @@ function FiveSAuditExecution({
 }: FiveSAuditExecutionProps) {
   const router = useRouter();
   const currentUser = useCurrentUser();
+  const { language, t } = useI18n();
   const initialSections = useMemo<
     FiveSSection[]
   >(
@@ -270,8 +303,10 @@ function FiveSAuditExecution({
 
           questions:
             section.questions.map(
-              (question) => ({
+              (question, questionIndex) => ({
                 ...question,
+
+                ...(!question.referenceImage ? referenceFields(section.category, questionIndex) : {}),
 
                 evidence:
                   question.evidence ?? [],
@@ -347,6 +382,8 @@ function FiveSAuditExecution({
     setSaving,
   ] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [hasSavedDraft, setHasSavedDraft] = useState(audit.status === "Draft");
+  const [auditorSignature, setAuditorSignature] = useState(audit.auditorSignature);
 
   const [
     showActionDialog,
@@ -400,20 +437,14 @@ function FiveSAuditExecution({
 
   const questionScrollRef =
     useRef<HTMLDivElement | null>(null);
+  const questionListRef =
+    useRef<HTMLDivElement | null>(null);
+
+  const questionItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const completionSnapshotRef = useRef<Record<string, boolean> | null>(null);
 
   const activeSection =
     sections[activeSectionIndex];
-
-  const activeQuestion =
-    activeSection?.questions[activeQuestionIndex];
-
-  const isLastQuestion = Boolean(
-    activeSection &&
-    activeQuestionIndex === activeSection.questions.length - 1
-  );
-
-  const isLastSection =
-    activeSectionIndex === sections.length - 1;
 
   const allQuestions = useMemo(
     () =>
@@ -462,6 +493,15 @@ function FiveSAuditExecution({
             100
         )
       : 0;
+
+  const auditLifecycleIndex =
+    audit.status === "Completed"
+      ? 3
+      : audit.status === "Draft" || hasSavedDraft
+        ? 2
+        : audit.status === "In Progress" || answeredQuestions > 0
+          ? 1
+          : 0;
 
   const auditReadyForCompletion =
     allQuestions.length > 0 && answeredQuestions === allQuestions.length;
@@ -560,6 +600,66 @@ function FiveSAuditExecution({
       sections[index - 1]
     );
   }
+
+  useEffect(() => {
+    const snapshot = Object.fromEntries(
+      allQuestions.map((question) => [question.id, isQuestionComplete(question)])
+    );
+
+    if (!completionSnapshotRef.current) {
+      completionSnapshotRef.current = snapshot;
+      return;
+    }
+
+    const activeId = activeSection?.questions[activeQuestionIndex]?.id;
+    const activeScore = activeId ? questionStates[activeId]?.score : null;
+    const justCompleted = Boolean(
+      activeId && snapshot[activeId] && !completionSnapshotRef.current[activeId]
+    );
+    completionSnapshotRef.current = snapshot;
+
+    if (!justCompleted || !activeSection || activeScore !== 2) return;
+
+    const nextQuestionIndex = activeSection.questions.findIndex(
+      (question, index) => index > activeQuestionIndex && !snapshot[question.id]
+    );
+
+    let nextSectionIndex = activeSectionIndex;
+    let targetQuestionIndex = nextQuestionIndex;
+
+    if (targetQuestionIndex < 0) {
+      nextSectionIndex = sections.findIndex(
+        (section, index) =>
+          index > activeSectionIndex &&
+          section.questions.some((question) => !snapshot[question.id])
+      );
+
+      if (nextSectionIndex >= 0) {
+        targetQuestionIndex = sections[nextSectionIndex].questions.findIndex(
+          (question) => !snapshot[question.id]
+        );
+      }
+    }
+
+    if (nextSectionIndex < 0 || targetQuestionIndex < 0) return;
+
+    const targetId = sections[nextSectionIndex].questions[targetQuestionIndex].id;
+    const timer = window.setTimeout(() => {
+      setNavigationDirection("forward");
+      setActiveSectionIndex(nextSectionIndex);
+      setActiveQuestionIndex(targetQuestionIndex);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          questionItemRefs.current[targetId]?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        });
+      });
+    }, 210);
+
+    return () => window.clearTimeout(timer);
+  }, [activeQuestionIndex, activeSection, activeSectionIndex, allQuestions, questionStates, sections]);
 
   /**
    * ---------------------------------------------------------
@@ -695,20 +795,26 @@ function FiveSAuditExecution({
     questionId: string,
     observation: string
   ) {
+    const actionId = questionStates[questionId]?.actionId;
+
     updateQuestionState(
       questionId,
       {
         observation,
-
-        actionDescription:
-          observation ||
-          questionStates[
-            questionId
-          ]
-            ?.actionDescription ||
-          "",
+        actionDescription: observation,
       }
     );
+
+    if (actionId) {
+      const existingAction = getActionById(actionId);
+
+      if (existingAction?.status === "Awaiting Assignment") {
+        updateAction(actionId, {
+          description: observation,
+          originalFinding: observation,
+        });
+      }
+    }
   }
 
   /**
@@ -723,9 +829,11 @@ function FiveSAuditExecution({
     const currentState = questionStates[question.id];
     const existingAction = currentState?.actionId ? getActionById(currentState.actionId) : undefined;
     if (existingAction) {
+      const synchronizedDescription = currentState?.observation ?? existingAction.description;
       updateQuestionState(question.id, {
         actionTitle: existingAction.title,
-        actionDescription: existingAction.description,
+        actionDescription: synchronizedDescription,
+        observation: synchronizedDescription,
         actionCategory: existingAction.actionCategory ?? "",
         priority: existingAction.priority,
         dueDate: existingAction.dueDate,
@@ -912,19 +1020,10 @@ function FiveSAuditExecution({
     questionId: string,
     file: File
   ) {
-    const reader =
-      new FileReader();
-
-    reader.onload = () => {
-      const dataUrl =
-        typeof reader.result ===
-        "string"
-          ? reader.result
-          : "";
-
-      if (!dataUrl) {
-        return;
-      }
+    const current = questionStates[questionId]?.evidence ?? [];
+    if (current.length >= MAX_EVIDENCE_IMAGES) { window.alert("Maximum 5 evidence images allowed."); return; }
+    try {
+      const { dataUrl, size } = await optimizeEvidenceImage(file);
 
       const evidence:
         FiveSEvidence = {
@@ -941,7 +1040,7 @@ function FiveSAuditExecution({
             ? "image"
             : "document",
 
-        size: file.size,
+        size,
 
         dataUrl,
 
@@ -952,11 +1051,6 @@ function FiveSAuditExecution({
         uploadedBy:
           currentUser.name,
       };
-
-      const current =
-        questionStates[
-          questionId
-        ]?.evidence ?? [];
 
       const nextEvidence = [
         ...current,
@@ -997,9 +1091,7 @@ function FiveSAuditExecution({
           }
         );
       }
-    };
-
-    reader.readAsDataURL(file);
+    } catch (error) { window.alert(error instanceof Error ? error.message : "Unable to process this image."); }
   }
 
   function handleEvidenceUpload(
@@ -1108,71 +1200,21 @@ function FiveSAuditExecution({
    * ---------------------------------------------------------
    */
 
-  function handleNextSection() {
-    const currentSection =
-      sections[
-        activeSectionIndex
-      ];
-
-    if (!currentSection) {
-      return;
-    }
-
-    if (
-      !isSectionComplete(
-        currentSection
-      )
-    ) {
-      return;
-    }
-
-    if (
-      activeSectionIndex <
-      sections.length - 1
-    ) {
-      navigateToSection(activeSectionIndex + 1);
-    } else {
-      setShowReview(true);
-    }
-  }
-
   function resetQuestionScroll() {
     window.requestAnimationFrame(() => {
       questionScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      questionListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
 
   function navigateToSection(sectionIndex: number) {
     setNavigationDirection(sectionIndex >= activeSectionIndex ? "forward" : "backward");
     setActiveSectionIndex(sectionIndex);
-    setActiveQuestionIndex(0);
+    const firstIncomplete = sections[sectionIndex]?.questions.findIndex(
+      (question) => !isQuestionComplete(question)
+    ) ?? -1;
+    setActiveQuestionIndex(firstIncomplete >= 0 ? firstIncomplete : 0);
     resetQuestionScroll();
-  }
-
-  function handlePreviousQuestion() {
-    setNavigationDirection("backward");
-    if (activeQuestionIndex > 0) {
-      setActiveQuestionIndex((current) => current - 1);
-      resetQuestionScroll();
-      return;
-    }
-
-    if (activeSectionIndex > 0) {
-      navigateToSection(activeSectionIndex - 1);
-    }
-  }
-
-  function handleNextQuestion() {
-    if (!activeSection) return;
-    setNavigationDirection("forward");
-
-    if (activeQuestionIndex < activeSection.questions.length - 1) {
-      setActiveQuestionIndex((current) => current + 1);
-      resetQuestionScroll();
-      return;
-    }
-
-    handleNextSection();
   }
 
   /**
@@ -1188,6 +1230,7 @@ function FiveSAuditExecution({
     window.setTimeout(() => {
       setSaving(false);
       setDraftSaved(true);
+      setHasSavedDraft(true);
       window.setTimeout(() => setDraftSaved(false), 1400);
     }, 600);
   }
@@ -1279,12 +1322,13 @@ function FiveSAuditExecution({
   }
 
   function handleCompleteAudit() {
-    if (!auditReadyForCompletion) return;
+    if (!auditReadyForCompletion || !auditorSignature) return;
 
     const completedAudit = buildCurrentAudit({
       status: "Completed",
       completionPercentage: 100,
       completedAt: new Date().toISOString(),
+      auditorSignature,
     });
 
     updateFiveSAudit(audit.id, completedAudit);
@@ -1295,6 +1339,17 @@ function FiveSAuditExecution({
 
     setShowCompleteConfirmation(false);
     router.push("/5s/audits");
+  }
+
+  function handleSignatureConfirm(signatureImage: string) {
+    const signature = { userId: currentUser.id, userName: audit.auditor, signedAt: new Date().toISOString(), signatureImage };
+    setAuditorSignature(signature);
+    updateFiveSAudit(audit.id, buildCurrentAudit({ auditorSignature: signature }));
+  }
+
+  function handleSignatureClear() {
+    setAuditorSignature(undefined);
+    updateFiveSAudit(audit.id, buildCurrentAudit({ auditorSignature: undefined }));
   }
 
   /**
@@ -1343,7 +1398,7 @@ function FiveSAuditExecution({
                 onClick={handleGenerateReport}
               >
                 <FileBarChart className="mr-2 size-4" />
-                Generate Report
+                {t("audit.generateReport")}
               </Button>
 
               <Button
@@ -1352,7 +1407,7 @@ function FiveSAuditExecution({
                 onClick={() => setShowCompleteConfirmation(true)}
               >
                 <CheckCircle2 className="mr-2 size-4" />
-                Complete Audit
+                {t("audit.complete")}
               </Button>
             </div>
           </div>
@@ -1452,7 +1507,7 @@ function FiveSAuditExecution({
 
                         <p className="mt-1 text-xs text-muted-foreground">
                           {
-                            section.description
+                            auditSectionDescription(language, section.category, section.description)
                           }
                         </p>
                       </div>
@@ -1514,7 +1569,8 @@ function FiveSAuditExecution({
                     <div className="space-y-2">
                       {section.questions.map(
                         (
-                          question
+                          question,
+                          reviewQuestionIndex
                         ) => {
                           const state =
                             questionStates[
@@ -1531,7 +1587,7 @@ function FiveSAuditExecution({
                               <div className="flex items-start justify-between gap-3">
                                 <p className="text-sm font-medium">
                                   {
-                                    question.question
+                                    auditQuestionText(language, section.category, reviewQuestionIndex, question.question)
                                   }
                                 </p>
 
@@ -1619,7 +1675,11 @@ function FiveSAuditExecution({
         <CompleteAuditDialog
           open={showCompleteConfirmation}
           questionCount={allQuestions.length}
+          auditor={audit.auditor}
+          signature={auditorSignature}
           onOpenChange={setShowCompleteConfirmation}
+          onSignatureConfirm={handleSignatureConfirm}
+          onSignatureClear={handleSignatureClear}
           onConfirm={handleCompleteAudit}
         />
       </div>
@@ -1657,115 +1717,104 @@ function FiveSAuditExecution({
               <>
                 <Button type="button" variant="outline" onClick={handleGenerateReport}>
                   <FileBarChart className="mr-2 size-4" />
-                  Generate Report
+                  {t("audit.generateReport")}
                 </Button>
                 <Button type="button" onClick={() => setShowCompleteConfirmation(true)}>
                   <CheckCircle2 className="mr-2 size-4" />
-                  Complete Audit
+                  {t("audit.complete")}
                 </Button>
               </>
             ) : (
               <>
                 <Button type="button" variant="outline" onClick={handleSaveDraft} disabled={saving}>
                   <Save className="mr-2 size-4" />
-                  {saving ? "Saving..." : draftSaved ? "✓ Saved" : "Save Draft"}
+                  {saving ? "Saving..." : draftSaved ? `✓ ${t("common.save")}` : t("audit.saveDraft")}
                 </Button>
                 <Button type="button" onClick={() => setShowReview(true)}>
-                  Review Audit
+                  {t("audit.review")}
                 </Button>
               </>
             )
           }
         />
 
-          {/* SECTION NAVIGATION */}
-
-          <div className="flex w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain border-t border-border/55 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {sections.map(
-              (section, index) => {
-                const sectionAnswered =
-                  section.questions.filter(
-                    (question) =>
-                      questionStates[
-                        question.id
-                      ]?.score !==
-                      null
-                  ).length;
-
-                const sectionComplete =
-                  isSectionComplete(
-                    section
-                  );
-
-                const sectionUnlocked =
-                  isSectionUnlocked(
-                    index
-                  );
-
-                const isActive =
-                  index ===
-                  activeSectionIndex;
-
-                return (
-                  <button
-                    key={
-                      section.category
-                    }
-                    type="button"
-                    disabled={
-                      !sectionUnlocked
-                    }
-                    onClick={() => {
-                      if (
-                        !sectionUnlocked
-                      ) {
-                        return;
-                      }
-
-                      navigateToSection(index);
-                    }}
-                    className={[
-                      "relative flex h-14 min-w-[148px] flex-1 items-center gap-2.5 border-0 px-3 text-left transition-colors md:min-w-[170px]",
-
-                      isActive
-                        ? "bg-primary/[0.035] text-primary after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary"
-                        : sectionUnlocked
-                          ? "text-foreground hover:bg-muted/35"
-                          : "cursor-not-allowed text-muted-foreground opacity-45",
-                    ].join(
-                      " "
-                    )}
-                  >
-                    <span className={[
-                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-                      isActive ? "bg-primary text-primary-foreground" : sectionComplete ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-muted text-muted-foreground",
-                    ].join(" ")}>
-                      {sectionComplete ? <Check className="size-3" /> : index + 1}
-                    </span>
-
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                      {section.category}
-                    </span>
-
-                    <span className="text-[10px] text-muted-foreground">
-                      {sectionAnswered}/{section.questions.length}
-                    </span>
-                  </button>
-                );
-              }
-            )}
-          </div>
       </div>
 
-      {/* SCROLLABLE QUESTION AREA */}
+      {/* AUDIT SECTION RAIL + QUESTION WORKSPACE */}
 
-      <div ref={questionScrollRef} className="w-full min-w-0 max-w-full flex-1 px-0 py-4 md:min-h-0 md:overflow-y-auto md:px-6 lg:px-8">
-        <div className="mx-auto w-full min-w-0 max-w-[1600px]">
+      <div ref={questionScrollRef} className="w-full min-w-0 max-w-full flex-1 px-0 py-4 md:min-h-0 md:overflow-y-auto md:px-6 lg:overflow-hidden lg:px-8">
+        <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-4 lg:h-full lg:min-h-0 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="hidden min-w-0 lg:block lg:h-full lg:min-h-0">
+            <div className="flex h-full min-w-0 flex-col rounded-xl border border-border/75 bg-card p-3 shadow-sm">
+              <div className="border-b border-border/60 px-2 pb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">5S Audit</p>
+                <p className="mt-1 truncate text-sm font-semibold" title={audit.title}>{audit.title}</p>
+                <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{audit.plant}<br />{audit.area} · {audit.department}<br />Auditor: {audit.auditor}</p>
+              </div>
+
+              <div className="border-b border-border/60 px-2 py-3">
+                <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("audit.timeline")}</p>
+                <AuditLifecycleTimeline currentIndex={auditLifecycleIndex} />
+              </div>
+
+              <nav className="mt-2 flex-1 space-y-1" aria-label="5S audit sections">
+                {sections.map((section, index) => {
+                  const completed = section.questions.filter(isQuestionComplete).length;
+                  const active = index === activeSectionIndex;
+                  const complete = completed === section.questions.length;
+                  const unlocked = isSectionUnlocked(index);
+                  return (
+                    <button
+                      key={section.category}
+                      type="button"
+                      disabled={!unlocked}
+                      onClick={() => unlocked && navigateToSection(index)}
+                      className={`relative flex w-full min-w-0 items-center gap-2 rounded-md py-2.5 pl-3 pr-2 text-left text-xs transition-colors ${active ? "bg-primary/[0.07] font-semibold text-primary before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-primary" : unlocked ? "text-muted-foreground hover:bg-muted/50 hover:text-foreground" : "cursor-not-allowed text-muted-foreground opacity-45"}`}
+                    >
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px]">
+                        {complete ? <Check className="size-3 text-emerald-600" /> : index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 break-words">{auditSectionName(language, section.category)}</span>
+                      <span className={active ? "text-primary" : "text-muted-foreground"}>{completed}/{section.questions.length}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="mt-3 border-t border-border/60 px-2 pt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Overall progress</p>
+                <div className="mt-2 flex items-end justify-between gap-2"><p className="text-xs font-medium">{answeredQuestions} of {allQuestions.length} completed</p><p className="text-sm font-semibold text-primary">{completionPercentage}%</p></div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${completionPercentage}%` }} /></div>
+              </div>
+            </div>
+          </aside>
+
+          <div className="min-w-0 lg:hidden">
+            <div className="mb-3 rounded-lg border border-border/70 bg-card px-3 py-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("audit.timeline")}</p>
+              <AuditLifecycleTimeline currentIndex={auditLifecycleIndex} />
+            </div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground" htmlFor="audit-section-selector">5S section</label>
+            <Select value={String(activeSectionIndex)} onValueChange={(value) => navigateToSection(Number(value))}>
+              <SelectTrigger id="audit-section-selector" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sections.map((section, index) => {
+                  const completed = section.questions.filter(isQuestionComplete).length;
+                  return <SelectItem key={section.category} value={String(index)} disabled={!isSectionUnlocked(index)}>{auditSectionName(language, section.category)} · {completed}/{section.questions.length}</SelectItem>;
+                })}
+              </SelectContent>
+            </Select>
+            <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${completionPercentage}%` }} /></div><span>{answeredQuestions}/{allQuestions.length} · {completionPercentage}%</span></div>
+          </div>
+
+          <main className="min-w-0 lg:h-full lg:min-h-0">
           {activeSection && (
-            <Card className="gap-0 overflow-hidden">
+            <Card className="gap-0 overflow-hidden lg:h-full lg:min-h-0">
               {/* REDUCED SECTION HEADER */}
 
-              <CardHeader className="border-b border-border/55 py-3">
+              <CardHeader className="shrink-0 border-b border-border/55 py-3">
                 <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-primary/35 bg-primary/[0.035] text-xs font-semibold text-primary">
@@ -1775,31 +1824,31 @@ function FiveSAuditExecution({
                     <div className="min-w-0">
                       <CardTitle className="text-base">
                         {
-                          activeSection.category
+                          auditSectionName(language, activeSection.category)
                         }
                       </CardTitle>
 
                       <p className="whitespace-normal break-words text-[11px] leading-4 text-muted-foreground">
                         {
-                          activeSection.description
+                          auditSectionDescription(language, activeSection.category, activeSection.description)
                         }
                       </p>
                     </div>
                   </div>
 
                   <div className="shrink-0 pl-12 text-left md:pl-0 md:text-right">
-                    <p className="text-xs font-semibold">Question {activeQuestionIndex + 1} of {activeSection.questions.length}</p>
+                    <p className="text-xs font-semibold">{activeSection.questions.filter(isQuestionComplete).length} / {activeSection.questions.length} {t("common.completed")}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {Math.round(((activeQuestionIndex + 1) / activeSection.questions.length) * 100)}% through section
+                      {Math.round((activeSection.questions.filter(isQuestionComplete).length / activeSection.questions.length) * 100)}% {t("audit.sectionProgress")}
                     </p>
                   </div>
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${((activeQuestionIndex + 1) / activeSection.questions.length) * 100}%` }} />
+                  <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${(activeSection.questions.filter(isQuestionComplete).length / activeSection.questions.length) * 100}%` }} />
                 </div>
               </CardHeader>
 
-              <CardContent className="min-w-0 p-4 md:p-5 lg:p-6">
+              <CardContent ref={questionListRef} className="min-w-0 p-4 md:p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6">
                 <div className="space-y-3">
                   {activeSection.questions.map(
                     (
@@ -1815,39 +1864,82 @@ function FiveSAuditExecution({
                         return null;
                       }
 
-                      if (questionIndex !== activeQuestionIndex) {
-                        return null;
-                      }
-
                       const requiresAction =
                         state.score ===
                           0 ||
                         state.score ===
                           1;
 
-                      const questionUnlocked =
-                        questionIndex === 0 ||
-                        isQuestionComplete(
-                          activeSection.questions[
-                            questionIndex - 1
-                          ]
+                      const questionUnlocked = true;
+                      const expanded = questionIndex === activeQuestionIndex;
+                      const complete = isQuestionComplete(question);
+
+                      if (!expanded) {
+                        return (
+                          <div
+                            key={question.id}
+                            ref={(element) => { questionItemRefs.current[question.id] = element; }}
+                            className="relative min-w-0 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden"
+                          >
+                            <span className={`absolute left-0 top-3.5 z-10 flex size-6 items-center justify-center rounded-full border bg-background ${state.score === 2 ? "border-emerald-500 text-emerald-600" : state.score === 1 ? "border-amber-500 text-amber-600" : state.score === 0 ? "border-red-500 text-red-600" : "border-border text-muted-foreground"}`}>
+                              {complete ? <Check className="size-3.5" /> : state.score === 0 ? <AlertCircle className="size-3.5" /> : <span className="size-1.5 rounded-full bg-current" />}
+                            </span>
+                            <div className="flex min-w-0 items-start gap-1">
+                            <button
+                              type="button"
+                              aria-expanded="false"
+                              aria-controls={`audit-question-panel-${question.id}`}
+                              onClick={() => {
+                                setNavigationDirection(questionIndex >= activeQuestionIndex ? "forward" : "backward");
+                                setActiveQuestionIndex(questionIndex);
+                              }}
+                              className="flex min-w-0 flex-1 items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <span className="pt-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">{String(questionIndex + 1).padStart(2, "0")}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block whitespace-normal break-words text-sm font-medium leading-5 [overflow-wrap:anywhere]">{auditQuestionText(language, activeSection.category, questionIndex, question.question)}</span>
+                                <span className="mt-1 block text-[11px] text-muted-foreground">
+                                  {state.observation.trim() ? t("audit.observationAdded") : t("audit.noObservation")}
+                                  {state.actionId ? ` · ${t("audit.oneAction")}` : ""}
+                                  {state.evidence.length ? ` · ${state.evidence.length} ${t("audit.evidence")}` : ""}
+                                </span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                {state.score !== null ? <Badge className={SCORE_STYLES[state.score]}><span className="sm:hidden" aria-hidden="true">{state.score}</span><span className="hidden sm:inline">{state.score} · {state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")}</span><span className="sr-only sm:hidden">{state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")}</span></Badge> : <span className="hidden text-[11px] text-muted-foreground sm:inline">{t("audit.notAnswered")}</span>}
+                                <ChevronDown className="size-4 text-muted-foreground" />
+                              </span>
+                            </button>
+                            <FiveSReferenceGuide question={question} questionText={auditQuestionText(language, activeSection.category, questionIndex, question.question)} />
+                            </div>
+                          </div>
                         );
+                      }
 
                       return (
                         <div
                           key={
                             question.id
                           }
-                          className={`min-w-0 ${navigationDirection === "forward" ? "motion-question-forward" : "motion-question-backward"}`}
+                          ref={(element) => { questionItemRefs.current[question.id] = element; }}
+                          className={`relative min-w-0 scroll-mt-24 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden ${navigationDirection === "forward" ? "motion-question-forward" : "motion-question-backward"}`}
                         >
                           {/* QUESTION */}
 
-                          <div className="flex min-w-0 max-w-full gap-3">
+                          <span className="absolute left-0 top-3.5 z-10 flex size-6 items-center justify-center rounded-full border border-primary bg-primary text-primary-foreground shadow-sm">
+                            <span className="size-1.5 rounded-full bg-current" />
+                          </span>
+
+                          <div className="min-w-0 rounded-lg border border-primary/35 bg-primary/[0.018] p-4 shadow-sm">
+                          <div className="flex min-w-0 items-start gap-1">
+                          <button
+                            type="button"
+                            aria-expanded="true"
+                            aria-controls={`audit-question-panel-${question.id}`}
+                            onClick={() => setActiveQuestionIndex(-1)}
+                            className="flex w-full min-w-0 max-w-full gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
                             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                              {
-                                questionIndex +
-                                1
-                              }
+                              {questionIndex + 1}
                             </div>
 
                             <div className="min-w-0 flex-1">
@@ -1855,14 +1947,14 @@ function FiveSAuditExecution({
                                 <div className="min-w-0 max-w-full">
                                   <p className="max-w-5xl whitespace-normal break-words text-lg font-semibold leading-[1.35] tracking-[-0.01em] [overflow-wrap:anywhere] md:leading-7">
                                     {
-                                      question.question
+                                      auditQuestionText(language, activeSection.category, questionIndex, question.question)
                                     }
                                   </p>
 
                                   {question.description && (
                                     <p className="mt-1 max-w-full whitespace-normal break-words text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                                       {
-                                        question.description
+                                        t("audit.assessRequirement")
                                       }
                                     </p>
                                   )}
@@ -1882,19 +1974,24 @@ function FiveSAuditExecution({
                                     }{" "}
                                     ·{" "}
                                     {
-                                      SCORE_LABELS[
-                                        state.score
-                                      ]
+                                      state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")
                                     }
                                   </Badge>
                                 )}
+                                <ChevronUp className="size-4 shrink-0 text-muted-foreground" />
                               </div>
+                            </div>
+                          </button>
+                          <FiveSReferenceGuide question={question} questionText={auditQuestionText(language, activeSection.category, questionIndex, question.question)} />
+                          </div>
+
+                            <div id={`audit-question-panel-${question.id}`} className="mt-4 min-w-0 md:pl-11">
 
                               {/* SCORE */}
 
                               <div className="mt-4">
                                 <p className="mb-2 text-xs font-medium">
-                                  Score
+                                  {t("audit.score")}
                                 </p>
 
                                 <div className="grid min-w-0 gap-2 md:grid-cols-3">
@@ -1953,9 +2050,7 @@ function FiveSAuditExecution({
 
                                           <span className="text-xs font-medium">
                                             {
-                                              SCORE_LABELS[
-                                                score
-                                              ]
+                                              score === 0 ? t("score.zero") : score === 1 ? t("score.one") : t("score.two")
                                             }
                                           </span>
 
@@ -1977,7 +2072,7 @@ function FiveSAuditExecution({
                                   htmlFor={`observation-${question.id}`}
                                   className="text-xs font-medium"
                                 >
-                                  Observation <span className="font-normal text-muted-foreground">({requiresAction ? "Required" : "Optional"})</span>
+                                  {t("audit.observation")} <span className="font-normal text-muted-foreground">({requiresAction ? t("common.required") : t("common.optional")})</span>
                                   {requiresAction && (
                                     <span className="ml-1 text-destructive">
                                       *
@@ -2004,7 +2099,7 @@ function FiveSAuditExecution({
                                         .value
                                     )
                                   }
-                                  placeholder="Record your observation..."
+                                  placeholder={t("audit.recordObservation")}
                                     className="mt-2 min-h-24 w-full min-w-0 max-w-full"
                                   disabled={!questionUnlocked}
                                 />
@@ -2012,8 +2107,8 @@ function FiveSAuditExecution({
 
                               {/* CORRECTIVE ACTION */}
 
-                              <div className="mt-4 grid min-w-0 items-start gap-3">
-                              <div className="grid min-h-24 min-w-0 max-w-full items-center gap-3 rounded-lg border border-border/75 bg-muted/20 p-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                              <div className="mt-4 grid min-w-0 items-stretch gap-3 xl:grid-cols-2">
+                              <div className="flex min-h-32 min-w-0 max-w-full flex-col gap-3 rounded-lg border border-border/75 bg-muted/20 p-4">
                                 <div className="flex min-w-0 items-center gap-2">
                                   <AlertCircle
                                     className={[
@@ -2029,13 +2124,13 @@ function FiveSAuditExecution({
 
                                   <div className="min-w-0">
                                     <p className="text-xs font-medium">
-                                      Action <span className="font-normal text-muted-foreground">({requiresAction ? "Required" : "Optional"})</span>
+                                      {t("audit.action")} <span className="font-normal text-muted-foreground">({requiresAction ? t("common.required") : t("common.optional")})</span>
                                     </p>
 
                                     <p className="text-[11px] text-muted-foreground">
                                       {requiresAction
-                                        ? "Required for score 0 or 1"
-                                        : "Optional"}
+                                        ? t("audit.requiredForLowScore")
+                                        : t("common.optional")}
                                     </p>
                                   </div>
                                 </div>
@@ -2043,28 +2138,30 @@ function FiveSAuditExecution({
                                 <Button
                                   type="button"
                                   size="sm"
-                                  className="justify-self-center"
+                                  className="self-center"
                                   disabled={!questionUnlocked}
                                   variant={requiresAction ? "default" : "outline"}
                                   onClick={() => openActionDialog(question)}
                                 >
-                                  <Plus className="mr-1.5 size-3.5" />
-                                  {state.actionId ? "View Action" : "Add Action"}
+                                  {state.actionId ? <Eye className="mr-1.5 size-3.5" /> : <Plus className="mr-1.5 size-3.5" />}
+                                  {state.actionId ? `${t("common.view")} ${t("audit.action")}` : t("audit.addAction")}
                                 </Button>
 
-                                <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-self-end">
+                                <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
                                   {state.actionId && (
                                     <>
                                       <Badge variant="success">
                                         <CheckCircle2 className="mr-1 size-3" />
-                                        Action Created
+                                        {t("audit.actionCreated")}
                                       </Badge>
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[11px]"
-                                      >
-                                        Responsible: {state.assignedTo}
-                                      </Badge>
+                                      {state.assignedTo && (
+                                        <Badge
+                                          variant="secondary"
+                                          className="text-[11px]"
+                                        >
+                                          {t("audit.responsible")}: {state.assignedTo}
+                                        </Badge>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -2072,26 +2169,24 @@ function FiveSAuditExecution({
 
                               {/* EVIDENCE */}
 
-                              <div className="hidden">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-h-32 min-w-0 rounded-lg border border-border/75 bg-muted/20 p-4">
+                                <div className="flex flex-col gap-3">
                                   <div>
                                     <div className="flex items-center gap-2">
                                       <FileText className="size-4 text-muted-foreground" />
 
                                       <p className="text-xs font-medium">
-                                        Evidence <span className="font-normal text-muted-foreground">(Optional)</span>
+                                        {t("audit.evidence")} <span className="font-normal text-muted-foreground">({requiresAction ? t("common.required") : t("common.optional")})</span>
+                                        {requiresAction && <span className="ml-1 text-destructive">*</span>}
                                       </p>
                                     </div>
 
                                     <p className="mt-1 text-[11px] text-muted-foreground">
-                                      Attach photos or
-                                      supporting
-                                      documents to this
-                                      question.
+                                      {t("audit.attachEvidence")}
                                     </p>
                                   </div>
 
-                                  <div className="flex gap-2">
+                                  <div className="flex flex-wrap justify-center gap-2">
                                     <input
                                       ref={(
                                         element
@@ -2150,7 +2245,7 @@ function FiveSAuditExecution({
                                       }
                                     >
                                       <Upload className="mr-1.5 size-3.5" />
-                                      Upload
+                                      {t("common.upload")}
                                     </Button>
 
                                     <Button
@@ -2166,7 +2261,7 @@ function FiveSAuditExecution({
                                       }
                                     >
                                       <Camera className="mr-1.5 size-3.5" />
-                                      Camera
+                                      {t("common.camera")}
                                     </Button>
                                   </div>
                                 </div>
@@ -2174,7 +2269,7 @@ function FiveSAuditExecution({
                                 {state.evidence.length > 0 && (
                                   <div className="mt-4 border-t border-border/60 pt-3">
                                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                                      Uploaded Evidence
+                                      {t("audit.uploadedEvidence")}
                                     </p>
 
                                     <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
@@ -2257,42 +2352,9 @@ function FiveSAuditExecution({
                 </div>
               </CardContent>
 
-              <CardFooter className="mobile-safe-bottom sticky bottom-0 z-20 grid w-full min-w-0 max-w-full grid-cols-2 gap-2 border-t border-border/65 bg-background/95 px-4 py-3 backdrop-blur md:static md:grid-cols-[auto_1fr_auto] md:items-center md:bg-muted/15 md:backdrop-blur-none lg:px-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={activeSectionIndex === 0 && activeQuestionIndex === 0}
-                  onClick={handlePreviousQuestion}
-                  className="row-start-2 w-full md:row-auto md:w-auto"
-                >
-                  <ArrowLeft className="mr-2 size-4" />
-                  Previous
-                </Button>
-
-                <div className="col-span-2 row-start-1 text-center text-xs tabular-nums text-muted-foreground md:col-span-1 md:col-start-2">
-                  {answeredQuestions} of {allQuestions.length} completed
-                </div>
-
-                <Button
-                  type="button"
-                  disabled={
-                    isLastQuestion
-                      ? !isSectionComplete(activeSection)
-                      : !activeQuestion || !isQuestionComplete(activeQuestion)
-                  }
-                  onClick={handleNextQuestion}
-                  className="row-start-2 w-full md:row-auto md:w-auto"
-                >
-                  {isLastQuestion
-                    ? isLastSection
-                      ? "Review Audit"
-                      : "Next Section"
-                    : "Next"}
-                  <ArrowRight className="ml-2 size-4" />
-                </Button>
-              </CardFooter>
             </Card>
           )}
+          </main>
         </div>
       </div>
 
@@ -2478,7 +2540,11 @@ function FiveSAuditExecution({
       <CompleteAuditDialog
         open={showCompleteConfirmation}
         questionCount={allQuestions.length}
+        auditor={audit.auditor}
+        signature={auditorSignature}
         onOpenChange={setShowCompleteConfirmation}
+        onSignatureConfirm={handleSignatureConfirm}
+        onSignatureClear={handleSignatureClear}
         onConfirm={handleCompleteAudit}
       />
 
@@ -2489,26 +2555,36 @@ function FiveSAuditExecution({
 function CompleteAuditDialog({
   open,
   questionCount,
+  auditor,
+  signature,
   onOpenChange,
+  onSignatureConfirm,
+  onSignatureClear,
   onConfirm,
 }: {
   open: boolean;
   questionCount: number;
+  auditor: string;
+  signature?: FiveSAudit["auditorSignature"];
   onOpenChange: (open: boolean) => void;
+  onSignatureConfirm: (signatureImage: string) => void;
+  onSignatureClear: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-h-[calc(100dvh-1.5rem)] max-w-3xl overflow-y-auto overscroll-contain">
         <AlertDialogHeader>
-          <AlertDialogTitle>Complete this audit?</AlertDialogTitle>
+          <AlertDialogTitle>{t("signature.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            All {questionCount} questions are complete. The audit will be marked as completed and you will return to the Audits listing.
+            All {questionCount} questions are complete. Sign below to approve the audit, then select Complete Audit.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <AuditorSignaturePad auditor={auditor} signature={signature} onConfirm={onSignatureConfirm} onClear={onSignatureClear} />
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Complete Audit</AlertDialogAction>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction disabled={!signature} onClick={onConfirm}>{t("audit.complete")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -2548,6 +2624,7 @@ function ActionDialog({
   onEvidencePreview,
   saving,
 }: ActionDialogProps) {
+  const { actionCategoryLabel, t } = useI18n();
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
   const evidenceCameraRef = useRef<HTMLInputElement | null>(null);
   const requiresAction =
@@ -2586,7 +2663,7 @@ function ActionDialog({
               />
 
               <h2 className="text-base font-semibold">
-                Action
+                {t("audit.action")}
               </h2>
             </div>
 
@@ -2603,12 +2680,10 @@ function ActionDialog({
                   ]
                 }`}
               >
-                Score{" "}
+                {t("audit.score")}{" "}
                 {state.score} ·{" "}
                 {
-                  SCORE_LABELS[
-                    state.score
-                  ]
+                  state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")
                 }
               </Badge>
             )}
@@ -2631,7 +2706,7 @@ function ActionDialog({
           <div className="space-y-4">
             <div>
               <label className="text-xs font-medium">
-                Action Title
+                {t("action.title")}
               </label>
 
               <Input
@@ -2645,7 +2720,7 @@ function ActionDialog({
                         .value,
                   })
                 }
-                placeholder="Enter corrective action..."
+                placeholder={t("action.enterTitle")}
                 className="mt-1.5"
                 disabled={!canEditCreatedAction}
               />
@@ -2653,7 +2728,7 @@ function ActionDialog({
 
             <div>
               <label className="text-xs font-medium">
-                Description
+                {t("action.description")}
               </label>
 
               <Textarea
@@ -2665,9 +2740,12 @@ function ActionDialog({
                     actionDescription:
                       event.target
                         .value,
+                    observation:
+                      event.target
+                        .value,
                   })
                 }
-                placeholder="Describe what needs to be done..."
+                placeholder={t("action.enterDescription")}
                 className="mt-1.5 min-h-24"
                 disabled={!canEditCreatedAction}
               />
@@ -2678,15 +2756,15 @@ function ActionDialog({
                 <div>
                   <div className="flex items-center gap-2">
                     <FileText className="size-4 text-muted-foreground" />
-                    <p className="text-xs font-medium">Original Finding Evidence {requiresAction ? <span className="text-destructive">*</span> : <span className="font-normal text-muted-foreground">(Optional)</span>}</p>
+                    <p className="text-xs font-medium">{t("action.originalEvidence")} {requiresAction ? <span className="text-destructive">*</span> : <span className="font-normal text-muted-foreground">({t("common.optional")})</span>}</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Attach the Before evidence that shows why this corrective action is required.</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{t("action.evidenceHelp")}</p>
                 </div>
                 {canEditCreatedAction && <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                   <input ref={evidenceInputRef} type="file" accept="image/*,.pdf,.doc,.docx" className="hidden" onChange={onEvidenceUpload} />
                   <input ref={evidenceCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onEvidenceUpload} />
-                  <Button type="button" size="sm" variant="outline" className="order-2 flex-1 sm:order-1 sm:flex-none" onClick={() => evidenceInputRef.current?.click()}><Upload className="mr-1.5 size-3.5" /> Upload</Button>
-                  <Button type="button" size="sm" variant="outline" className="order-1 flex-1 sm:order-2 sm:flex-none" onClick={() => evidenceCameraRef.current?.click()}><Camera className="mr-1.5 size-3.5" /> Camera</Button>
+                  <Button type="button" size="sm" variant="outline" className="order-2 flex-1 sm:order-1 sm:flex-none" onClick={() => evidenceInputRef.current?.click()}><Upload className="mr-1.5 size-3.5" /> {t("common.upload")}</Button>
+                  <Button type="button" size="sm" variant="outline" className="order-1 flex-1 sm:order-2 sm:flex-none" onClick={() => evidenceCameraRef.current?.click()}><Camera className="mr-1.5 size-3.5" /> {t("common.camera")}</Button>
                 </div>}
               </div>
               {state.evidence.length > 0 ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{state.evidence.map((evidence) => <div key={evidence.id} className="flex min-w-0 items-center gap-2 rounded-lg border bg-background p-2"><button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onEvidencePreview(evidence)}>{evidence.type === "image" ? <img src={evidence.dataUrl} alt="" className="size-11 shrink-0 rounded object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded bg-muted"><FileText className="size-5" /></span>}<span className="min-w-0"><span className="block truncate text-xs font-medium">{evidence.name}</span><span className="text-[10px] text-muted-foreground">{getEvidenceFileLabel(evidence)} · {formatEvidenceSize(evidence.size)}</span></span></button>{canEditCreatedAction && <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEvidenceRemove(evidence.id)} aria-label={`Remove ${evidence.name}`}><Trash2 className="size-3.5" /></Button>}</div>)}</div> : requiresAction && <p className="mt-3 text-[11px] font-medium text-destructive">At least one evidence attachment is required for Non Compliance or Partial Compliance.</p>}
@@ -2695,7 +2773,7 @@ function ActionDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs font-medium">
-                  Action Category
+                  {t("action.category")} <span className="text-destructive">*</span>
                 </label>
 
                 <Select
@@ -2705,19 +2783,19 @@ function ActionDialog({
                   }}
                   disabled={!canEditCreatedAction}
                 >
-                  <SelectTrigger className="mt-1.5 w-full">
-                    <SelectValue placeholder="Select action category" />
+                  <SelectTrigger className="mt-1.5 w-full" aria-required="true" aria-invalid={!state.actionCategory}>
+                    <SelectValue placeholder={t("action.selectCategory")} />
                   </SelectTrigger>
                   <SelectContent>
-                    {FIVE_S_ACTION_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                    {FIVE_S_ACTION_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{actionCategoryLabel(category)}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <p className="mt-1.5 text-[11px] text-muted-foreground">Required and selected by the Auditor.</p>
+                <p className={`mt-1.5 text-[11px] ${state.actionCategory ? "text-muted-foreground" : "font-medium text-destructive"}`}>{t("action.categoryRequired")}</p>
               </div>
 
               <div>
                 <label className="text-xs font-medium">
-                  Priority
+                  {t("action.priority")}
                 </label>
 
                 <Select
@@ -2787,7 +2865,7 @@ function ActionDialog({
             onClick={onClose}
             disabled={saving}
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
 
           {canEditCreatedAction && (
@@ -2807,7 +2885,7 @@ function ActionDialog({
               ) : (
                 <>
                   <Plus className="mr-2 size-4" />
-                  {state.actionId ? "Update Action" : "Create Action"}
+                  {state.actionId ? t("action.update") : t("action.create")}
                 </>
               )}
             </Button>
@@ -2819,7 +2897,7 @@ function ActionDialog({
               onClick={onClose}
             >
               <CheckCircle2 className="mr-2 size-4" />
-              Action Created
+              {t("audit.actionCreated")}
             </Button>
           )}
         </div>

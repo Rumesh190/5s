@@ -47,7 +47,7 @@ function NotificationBell() {
           </Badge>
         )}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80">
+      <PopoverContent align="end" className="max-h-[calc(100dvh-4.5rem)] w-[calc(100vw-1.5rem)] max-w-80 overflow-y-auto">
         <PopoverHeader>
           <PopoverTitle>Notifications</PopoverTitle>
         </PopoverHeader>
