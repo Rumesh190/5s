@@ -310,18 +310,18 @@ export function startAssignedAction(actionId: string, actor: ActionActor) {
 export function submitActionForReview(
   actionId: string,
   actor: ActionActor,
-  resolution: { observation: string; actionCategory: string; costSaving: number }
+  resolution: { observation: string; correctiveActionCategory: string; costSaving: number }
 ) {
   const action = getActionById(actionId);
   if (!action || !isResponsible(action, actor) || !["Assigned", "Open", "In Progress", "Rework Required"].includes(action.status)) return undefined;
-  if (!resolution.observation.trim() || !resolution.actionCategory || !Number.isFinite(resolution.costSaving) || resolution.costSaving < 0) return undefined;
+  if (!resolution.observation.trim() || !resolution.correctiveActionCategory || action.evidence.length === 0 || !Number.isFinite(resolution.costSaving) || resolution.costSaving < 0) return undefined;
   const isResubmission = action.status === "Rework Required" || (action.reviewHistory?.length ?? 0) > 0;
   const now = new Date().toISOString();
   const updated = updateAction(actionId, {
     status: "Pending Auditor Review",
     actionTakenDescription: resolution.observation.trim(),
     resolutionObservation: resolution.observation.trim(),
-    actionCategory: resolution.actionCategory,
+    correctiveActionCategory: resolution.correctiveActionCategory,
     costSaving: resolution.costSaving,
     currency: action.currency ?? "INR",
     submittedForReviewAt: now,

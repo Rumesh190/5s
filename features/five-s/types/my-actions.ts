@@ -77,6 +77,8 @@ export interface MyAction {
 
   /** Operational classification selected when the action is created. */
   actionCategory?: string;
+  /** Resolution classification selected by the responsible member. */
+  correctiveActionCategory?: string;
   improvementTheme?: string;
   improvementClassification?: "Basic Improvement" | "Improvement Case" | "Trouble / Corrective Case";
   originalFinding?: string;

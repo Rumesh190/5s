@@ -8,7 +8,6 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
-  Circle,
   ClipboardCheck,
   ExternalLink,
   FileText,
@@ -58,7 +57,7 @@ import {
   updateAction,
   useActionStore,
 } from "@/lib/actions/action-store";
-import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
+import { FIVE_S_CORRECTIVE_ACTION_CATEGORIES, getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
 import { useCurrentUser } from "@/lib/current-user";
 import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage } from "@/lib/evidence-images";
 
@@ -119,7 +118,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   useEffect(() => {
     if (!action) return;
     setObservation(action.resolutionObservation ?? action.actionTakenDescription ?? "");
-    setCategory(action.actionCategory ?? "");
+    setCategory(action.correctiveActionCategory ?? "");
     setCostSaving(String(action.costSaving ?? 0));
   }, [action?.id]);
 
@@ -155,12 +154,12 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   const canReview = isCreator && ["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status);
   const canStart = isResponsible && ["Assigned", "Open", "Rework Required"].includes(action.status);
   const submitLabel = action.status === "Rework Required" ? "Resubmit for Auditor Review" : "Submit for Auditor Review";
-  const validResolution = observation.trim() && Boolean(action.actionCategory) && Number.isFinite(Number(costSaving)) && Number(costSaving) >= 0;
+  const validResolution = observation.trim() && Boolean(category) && action.evidence.length > 0 && Number.isFinite(Number(costSaving)) && Number(costSaving) >= 0;
 
   function syncFields(updated: MyAction | undefined) {
     if (!updated) return;
     setObservation(updated.resolutionObservation ?? updated.actionTakenDescription ?? "");
-    setCategory(updated.actionCategory ?? "");
+    setCategory(updated.correctiveActionCategory ?? "");
     setCostSaving(String(updated.costSaving ?? 0));
   }
 
@@ -169,6 +168,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
     syncFields(updateAction(actionId, {
       actionTakenDescription: observation,
       resolutionObservation: observation,
+      correctiveActionCategory: category,
       costSaving: Number.isFinite(Number(costSaving)) ? Number(costSaving) : undefined,
       currency: "INR",
     }));
@@ -176,9 +176,9 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
   function submitForReview() {
     if (pendingTransition) return;
-    const actionCategory = action?.actionCategory ?? "";
+    const correctiveActionCategory = category;
     setPendingTransition("submit");
-    window.setTimeout(() => { syncFields(submitActionForReview(actionId, actor, { observation, actionCategory, costSaving: Number(costSaving) })); setPendingTransition(null); }, 220);
+    window.setTimeout(() => { syncFields(submitActionForReview(actionId, actor, { observation, correctiveActionCategory, costSaving: Number(costSaving) })); setPendingTransition(null); }, 220);
   }
 
   function startWork() {
@@ -236,9 +236,12 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             )}
           </>
         }
+        toolbar={
+          <div className="flex w-full min-w-0 items-center overflow-x-auto pb-0.5">
+            <LifecycleTimeline action={action} />
+          </div>
+        }
       />
-
-      <LifecycleTimeline action={action} />
 
       {canAssign && <Panel title="Assign Responsible Person" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm text-muted-foreground">Assign this {action.area} action to a member of your Zone.</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><Select value={assigneeId} onValueChange={(value)=>setAssigneeId(value??"")}><SelectTrigger className="w-full"><SelectValue placeholder="Select responsible person" /></SelectTrigger><SelectContent>{zoneConfiguration.members.map((member)=><SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select><Button disabled={!assigneeId} onClick={()=>assignActionToZoneMember(action.id, actor, assigneeId)}>Assign Action</Button></div></Panel>}
 
@@ -305,8 +308,13 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-sm font-medium">Action Category</label>
-                <ReadOnlyValue value={action.actionCategory ?? "—"} />
+                <label className="text-sm font-medium">Corrective Action Category</label>
+                {canEdit ? (
+                  <Select value={category} onValueChange={(value) => setCategory(value ?? "")}>
+                    <SelectTrigger className="mt-2 w-full"><SelectValue placeholder="Select corrective action category" /></SelectTrigger>
+                    <SelectContent>{FIVE_S_CORRECTIVE_ACTION_CATEGORIES.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
+                  </Select>
+                ) : <ReadOnlyValue value={action.correctiveActionCategory ?? "—"} />}
               </div>
               <div>
                 <label htmlFor="action-cost-saving" className="text-sm font-medium">Cost Saving</label>
@@ -322,7 +330,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium"><span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-green-600">After</span>Resolution Evidence</p>
+                  <p className="text-sm font-medium"><span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-green-600">After</span>Resolution Evidence <span className="text-destructive">*</span></p>
                   <p className="mt-0.5 text-xs text-muted-foreground">Upload evidence showing the completed corrective action.</p>
                 </div>
                 {canEdit && (
@@ -343,11 +351,11 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
             {canEdit && ["In Progress", "Rework Required"].includes(action.status) && (
               <div className="rounded-lg border bg-muted/15 p-4">
-                <p className="text-sm font-semibold">Ready for Review</p><div className="my-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><Meta label="Observation" value={observation.trim()?"Completed":"Required"}/><Meta label="Category" value={category||"Required"}/><Meta label="Cost Saving" value={`₹${(Number(costSaving)||0).toLocaleString("en-IN")}`}/><Meta label="Evidence" value={`${action.evidence.length} attachment${action.evidence.length===1?"":"s"}`}/></div>
+                <p className="text-sm font-semibold">Ready for Review</p><div className="my-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><Meta label="Observation" value={observation.trim()?"Completed":"Required"}/><Meta label="Corrective Category" value={category||"Required"}/><Meta label="Cost Saving" value={`₹${(Number(costSaving)||0).toLocaleString("en-IN")}`}/><Meta label="Evidence" value={`${action.evidence.length} attachment${action.evidence.length===1?"":"s"}`}/></div>
                 <Button className="w-full" disabled={!validResolution || pendingTransition === "submit"} onClick={submitForReview}>
                   <Send className="size-4" /> {pendingTransition === "submit" ? "Submitting..." : submitLabel}
                 </Button>
-                <p className="mt-2 text-center text-xs text-muted-foreground">Observation is required. Action Category was defined by the Auditor.</p>
+                <p className="mt-2 text-center text-xs text-muted-foreground">Observation, Corrective Action Category, and resolution evidence are required.</p>
               </div>
             )}
           </div>
@@ -418,42 +426,35 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
 function LifecycleTimeline({ action }: { action: MyAction }) {
   const activities = action.activityHistory ?? [];
-  const assigned = activities.find((item) => item.type === "assigned");
   const started = [...activities].reverse().find((item) => item.type === "started");
   const submitted = [...activities].reverse().find((item) => item.type === "submitted" || item.type === "resubmitted");
   const closed = [...activities].reverse().find((item) => item.type === "closed");
   const reviewActive = ["Pending Review", "Awaiting Review", "Completed"].includes(action.status);
-  const steps = [
-    { label: "Assigned", activity: assigned, complete: true },
-    { label: "In Progress", activity: started, complete: Boolean(started) },
-    { label: "Submitted for Review", activity: submitted, complete: Boolean(submitted) },
-    { label: "Under Review", activity: submitted, complete: reviewActive },
-    { label: "Closed", activity: closed, complete: Boolean(closed) },
-  ];
+  const steps = ["Assigned", "In Progress", "Submitted for Review", "Under Review", "Closed"];
+  const currentIndex = closed
+    ? 4
+    : reviewActive
+      ? 3
+      : submitted
+        ? 2
+        : started
+          ? 1
+          : 0;
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b bg-muted/20 py-3"><CardTitle className="flex items-center gap-2 text-sm"><History className="size-4 text-primary" />Action lifecycle</CardTitle></CardHeader>
-      <CardContent className="py-5">
-        <div className="grid gap-0 md:hidden">
-          {steps.map((step, index) => <div key={step.label} className="relative grid grid-cols-[36px_1fr] gap-3 pb-5 last:pb-0">{index < steps.length - 1 && <span className={`absolute left-[15px] top-8 h-full w-px ${step.complete ? "bg-primary" : "bg-border"}`} />}<span className={`relative z-10 flex size-8 items-center justify-center rounded-full border-2 ${step.complete ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}>{step.complete ? <Check className="size-4" /> : <Circle className="size-3" />}</span><div className="min-w-0 pt-1"><p className={`text-sm font-semibold ${step.complete ? "text-foreground" : "text-muted-foreground"}`}>{step.label}</p>{step.activity ? <p className="mt-1 break-words text-xs text-muted-foreground">{formatDateTime(step.activity.createdAt)} · {step.activity.actorName}</p> : <p className="mt-1 text-xs text-muted-foreground">Pending</p>}</div></div>)}
-        </div>
-        <div className="hidden overflow-x-auto md:block">
-        <div className="grid min-w-[760px] grid-cols-5">
-          {steps.map((step, index) => (
-            <div key={step.label} className="relative px-3 text-center">
-              {index > 0 && <span className={`absolute right-1/2 top-4 h-px w-full ${step.complete ? "bg-primary" : "bg-border"}`} />}
-              <span className={`relative z-10 mx-auto flex size-8 items-center justify-center rounded-full border-2 ${step.complete ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"}`}>
-                {step.complete ? <Check className="size-4" /> : <Circle className="size-3" />}
-              </span>
-              <p className={`mt-2 text-xs font-semibold ${step.complete ? "text-foreground" : "text-muted-foreground"}`}>{step.label}</p>
-              {step.activity ? <><p className="mt-1 text-[11px] text-muted-foreground">{formatDateTime(step.activity.createdAt)}</p><p className="text-[11px] text-muted-foreground">by {step.activity.actorName}</p></> : <p className="mt-1 text-[11px] text-muted-foreground">Pending</p>}
-            </div>
-          ))}
-        </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex min-w-[620px] flex-1 items-start" aria-label="Action lifecycle">
+      {steps.map((label, index) => {
+        const complete = index < currentIndex;
+        const current = index === currentIndex;
+        return <div key={label} className="relative flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
+          <span className={`relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border text-[9px] ${complete ? "border-emerald-500 bg-emerald-500 text-white" : current ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}>
+            {complete ? <Check className="size-3" /> : index + 1}
+          </span>
+          {index < steps.length - 1 && <span className={`absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px ${index < currentIndex ? "bg-emerald-400" : "bg-border"}`} />}
+          <span className={`min-w-0 whitespace-nowrap text-xs leading-4 ${current ? "font-semibold text-primary" : complete ? "font-medium text-foreground" : "font-medium text-muted-foreground"}`}>{label}</span>
+        </div>;
+      })}
+    </div>
   );
 }
 

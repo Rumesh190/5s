@@ -15,7 +15,28 @@ export const FIVE_S_ZONE_CONFIGURATION: FiveSZoneConfiguration[] = [
     { id: "USR-MEENA", name: "Meena", role: "Zone Member" }, { id: "USR-SURIYA", name: "Suriya", role: "Zone Member" }, { id: "USR-RAHUL", name: "Rahul", role: "Zone Member" }, { id: "USR-VIJAY", name: "Vijay", role: "Zone Member" }, { id: "USR-MOHAMMED", name: "Mohammed", role: "Zone Member" },
   ] },
 ];
-export const FIVE_S_ACTION_CATEGORIES = ["Organization & Layout", "Cleanliness & Hygiene", "Standardization Lapses", "Equipment Maintenance", "Resource Management", "Training & Knowledge Gaps", "Environmental Sustainability", "Customer Satisfaction"] as const;
+export const FIVE_S_ACTION_CATEGORIES = [
+  "Organization & Layout",
+  "Cleanliness & Hygiene",
+  "Standardization Lapses",
+  "Equipment Maintenance",
+  "Resource Management",
+  "Training & Knowledge Gaps",
+  "Environmental Sustainability",
+  "Customer Satisfaction",
+] as const;
+
+export const FIVE_S_CORRECTIVE_ACTION_CATEGORIES = [
+  "Add / Revise Process",
+  "Checkpoints / Review",
+  "Communication",
+  "Correction of Documentation",
+  "Create / Revise Procedure",
+  "Design / Equipment Modification",
+  "Education / Training",
+  "Other",
+  "Provide / Change Resources",
+] as const;
 export type FiveSActionPriority = "Low" | "Medium" | "High" | "Critical";
 const PRIORITY_DUE_DATE_OFFSETS: Record<FiveSActionPriority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 export function toLocalInputDate(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}` }

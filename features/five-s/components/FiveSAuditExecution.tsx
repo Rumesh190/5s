@@ -21,6 +21,7 @@ import {
   FileText,
   FileBarChart,
   Maximize2,
+  Minimize2,
   Minus,
   Plus,
   Save,
@@ -181,24 +182,22 @@ const SCORE_INDICATOR_STYLES: Record<number, string> = {
   2: "border-green-300 bg-green-50 text-green-700 dark:border-green-500/35 dark:bg-green-500/10 dark:text-green-300",
 };
 
-const AUDIT_LIFECYCLE = ["Started", "In Progress", "Draft", "Completed"];
+const AUDIT_LIFECYCLE = ["Start", "Draft", "In Progress", "Completion"];
 
 function AuditLifecycleTimeline({ currentIndex }: { currentIndex: number }) {
-  const { t } = useI18n();
-  const labels = [t("common.started"), t("common.inProgress"), t("common.draft"), t("common.completed")];
   return (
-    <div className="grid grid-cols-4 gap-1 lg:grid-cols-1 lg:gap-0" aria-label="Audit lifecycle">
-      {labels.map((label, index) => {
+    <div className="flex min-w-[360px] flex-1 items-center" aria-label="Audit lifecycle">
+      {AUDIT_LIFECYCLE.map((label, index) => {
         const complete = index < currentIndex;
         const current = index === currentIndex;
 
         return (
-          <div key={label} className="relative flex min-w-0 flex-col items-center gap-1 pb-1 text-center lg:flex-row lg:items-start lg:gap-2 lg:pb-3 lg:text-left">
+          <div key={label} className="relative flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
             <span className={`relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border text-[9px] ${complete ? "border-emerald-500 bg-emerald-500 text-white" : current ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}>
               {complete ? <Check className="size-3" /> : index + 1}
             </span>
-            {index < AUDIT_LIFECYCLE.length - 1 && <span className={`absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px ${index < currentIndex ? "bg-emerald-400" : "bg-border"} lg:bottom-0 lg:left-[9px] lg:right-auto lg:top-5 lg:h-auto lg:w-px`} />}
-            <span className={`min-w-0 text-[9px] leading-3 lg:pt-0.5 lg:text-[11px] lg:leading-4 ${current ? "font-semibold text-primary" : complete ? "font-medium text-foreground" : "text-muted-foreground"}`}>{label}</span>
+            {index < AUDIT_LIFECYCLE.length - 1 && <span className={`absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px ${index < currentIndex ? "bg-emerald-400" : "bg-border"}`} />}
+            <span className={`min-w-0 text-xs leading-4 ${current ? "font-semibold text-primary" : complete ? "font-medium text-foreground" : "font-medium text-muted-foreground"}`}>{label}</span>
           </div>
         );
       })}
@@ -382,8 +381,11 @@ function FiveSAuditExecution({
     setSaving,
   ] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
-  const [hasSavedDraft, setHasSavedDraft] = useState(audit.status === "Draft");
+  const [hasSavedDraft, setHasSavedDraft] = useState(
+    audit.status === "Draft" && audit.completionPercentage > 0
+  );
   const [auditorSignature, setAuditorSignature] = useState(audit.auditorSignature);
+  const [fullScreen, setFullScreen] = useState(false);
 
   const [
     showActionDialog,
@@ -442,6 +444,7 @@ function FiveSAuditExecution({
 
   const questionItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const completionSnapshotRef = useRef<Record<string, boolean> | null>(null);
+  const autosaveReadyRef = useRef(false);
 
   const activeSection =
     sections[activeSectionIndex];
@@ -497,9 +500,9 @@ function FiveSAuditExecution({
   const auditLifecycleIndex =
     audit.status === "Completed"
       ? 3
-      : audit.status === "Draft" || hasSavedDraft
+      : audit.status === "In Progress"
         ? 2
-        : audit.status === "In Progress" || answeredQuestions > 0
+        : answeredQuestions > 0 || hasSavedDraft
           ? 1
           : 0;
 
@@ -533,6 +536,20 @@ function FiveSAuditExecution({
             100
         )
       : 0;
+
+  useEffect(() => {
+    if (!fullScreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const exitOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !showActionDialog && !previewEvidence) setFullScreen(false);
+    };
+    window.addEventListener("keydown", exitOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", exitOnEscape);
+    };
+  }, [fullScreen, previewEvidence, showActionDialog]);
 
   /**
    * ---------------------------------------------------------
@@ -760,18 +777,23 @@ function FiveSAuditExecution({
         Math.min(2, score)
       );
 
+    const nextScore =
+      questionStates[question.id]?.score === safeScore
+        ? null
+        : safeScore;
+
     const requiresAction =
-      safeScore === 0 ||
-      safeScore === 1;
+      nextScore === 0 ||
+      nextScore === 1;
 
     updateQuestionState(
       question.id,
       {
-        score: safeScore,
+        score: nextScore,
 
         status:
           getStatusFromScore(
-            safeScore
+            nextScore
           ),
 
         actionRequired:
@@ -1217,6 +1239,26 @@ function FiveSAuditExecution({
     resetQuestionScroll();
   }
 
+  function navigateQuestion(direction: -1 | 1) {
+    if (!activeSection) return;
+    if (direction === 1 && !isQuestionComplete(activeSection.questions[activeQuestionIndex])) return;
+
+    let sectionIndex = activeSectionIndex;
+    let questionIndex = activeQuestionIndex + direction;
+    if (questionIndex < 0 && sectionIndex > 0) {
+      sectionIndex -= 1;
+      questionIndex = sections[sectionIndex].questions.length - 1;
+    } else if (questionIndex >= activeSection.questions.length && sectionIndex < sections.length - 1) {
+      sectionIndex += 1;
+      questionIndex = 0;
+    }
+    if (sectionIndex === activeSectionIndex && questionIndex === activeQuestionIndex) return;
+    setNavigationDirection(direction === 1 ? "forward" : "backward");
+    setActiveSectionIndex(sectionIndex);
+    setActiveQuestionIndex(questionIndex);
+    resetQuestionScroll();
+  }
+
   /**
    * ---------------------------------------------------------
    * SAVE
@@ -1228,6 +1270,8 @@ function FiveSAuditExecution({
     setDraftSaved(false);
 
     window.setTimeout(() => {
+      const status = audit.status === "In Progress" ? "In Progress" : "Draft";
+      updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
       setSaving(false);
       setDraftSaved(true);
       setHasSavedDraft(true);
@@ -1283,8 +1327,9 @@ function FiveSAuditExecution({
                       question.status,
 
                     score:
-                      state?.score ??
-                      question.score,
+                      state
+                        ? state.score
+                        : question.score,
 
                     observation:
                       state?.observation ??
@@ -1310,6 +1355,24 @@ function FiveSAuditExecution({
       ...updates,
     };
   }
+
+  useEffect(() => {
+    if (!autosaveReadyRef.current) {
+      autosaveReadyRef.current = true;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const status = audit.status === "In Progress" ? "In Progress" : "Draft";
+      updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
+      if (answeredQuestions > 0) setHasSavedDraft(true);
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+    // The answer-state transition is the autosave trigger; the remaining values
+    // are the matching render snapshot intentionally persisted with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionStates]);
 
   function handleGenerateReport() {
     if (!auditReadyForCompletion && audit.status !== "Completed") return;
@@ -1693,10 +1756,10 @@ function FiveSAuditExecution({
    */
 
   return (
-    <div className="flex w-full min-w-0 max-w-full flex-col md:h-[calc(100dvh-7rem)] md:min-h-0">
+    <div className={fullScreen ? "fixed inset-0 z-[60] flex h-[100dvh] w-screen min-w-0 flex-col overflow-hidden bg-background motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-[0.99] motion-safe:duration-200" : "flex w-full min-w-0 max-w-full flex-col md:h-[calc(100dvh-7rem)] md:min-h-0"}>
       {/* FIXED HEADER */}
 
-      <div className="w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8">
+      <div className={`w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8 ${fullScreen ? "sticky top-0 z-40" : ""}`}>
         <FiveSPageHeader
           eyebrow=""
           title={`5S Audit · ${audit.title}`}
@@ -1736,6 +1799,11 @@ function FiveSAuditExecution({
               </>
             )
           }
+          toolbar={
+            <div className="flex w-full min-w-0 items-center overflow-x-auto pb-0.5">
+              <AuditLifecycleTimeline currentIndex={auditLifecycleIndex} />
+            </div>
+          }
         />
 
       </div>
@@ -1743,18 +1811,13 @@ function FiveSAuditExecution({
       {/* AUDIT SECTION RAIL + QUESTION WORKSPACE */}
 
       <div ref={questionScrollRef} className="w-full min-w-0 max-w-full flex-1 px-0 py-4 md:min-h-0 md:overflow-y-auto md:px-6 lg:overflow-hidden lg:px-8">
-        <div className="mx-auto grid w-full min-w-0 max-w-[1600px] gap-4 lg:h-full lg:min-h-0 lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="hidden min-w-0 lg:block lg:h-full lg:min-h-0">
+        <div className={`mx-auto grid w-full min-w-0 gap-4 lg:h-full lg:min-h-0 ${fullScreen ? "max-w-[1280px]" : "max-w-[1600px] lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]"}`}>
+          <aside className={fullScreen ? "hidden" : "hidden min-w-0 lg:block lg:h-full lg:min-h-0"}>
             <div className="flex h-full min-w-0 flex-col rounded-xl border border-border/75 bg-card p-3 shadow-sm">
               <div className="border-b border-border/60 px-2 pb-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">5S Audit</p>
                 <p className="mt-1 truncate text-sm font-semibold" title={audit.title}>{audit.title}</p>
                 <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{audit.plant}<br />{audit.area} · {audit.department}<br />Auditor: {audit.auditor}</p>
-              </div>
-
-              <div className="border-b border-border/60 px-2 py-3">
-                <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("audit.timeline")}</p>
-                <AuditLifecycleTimeline currentIndex={auditLifecycleIndex} />
               </div>
 
               <nav className="mt-2 flex-1 space-y-1" aria-label="5S audit sections">
@@ -1789,11 +1852,7 @@ function FiveSAuditExecution({
             </div>
           </aside>
 
-          <div className="min-w-0 lg:hidden">
-            <div className="mb-3 rounded-lg border border-border/70 bg-card px-3 py-3">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("audit.timeline")}</p>
-              <AuditLifecycleTimeline currentIndex={auditLifecycleIndex} />
-            </div>
+          <div className={fullScreen ? "hidden" : "min-w-0 lg:hidden"}>
             <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground" htmlFor="audit-section-selector">5S section</label>
             <Select value={String(activeSectionIndex)} onValueChange={(value) => navigateToSection(Number(value))}>
               <SelectTrigger id="audit-section-selector" className="w-full">
@@ -1836,11 +1895,17 @@ function FiveSAuditExecution({
                     </div>
                   </div>
 
-                  <div className="shrink-0 pl-12 text-left md:pl-0 md:text-right">
+                  <div className="flex shrink-0 items-center gap-2 pl-12 text-left md:pl-0 md:text-right">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setFullScreen((value) => !value)} aria-label={fullScreen ? "Exit full screen" : "Enter full screen"}>
+                      {fullScreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                      {fullScreen ? "Exit" : "Full Screen"}
+                    </Button>
+                    <div>
                     <p className="text-xs font-semibold">{activeSection.questions.filter(isQuestionComplete).length} / {activeSection.questions.length} {t("common.completed")}</p>
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {Math.round((activeSection.questions.filter(isQuestionComplete).length / activeSection.questions.length) * 100)}% {t("audit.sectionProgress")}
                     </p>
+                    </div>
                   </div>
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
@@ -1873,6 +1938,9 @@ function FiveSAuditExecution({
                       const questionUnlocked = true;
                       const expanded = questionIndex === activeQuestionIndex;
                       const complete = isQuestionComplete(question);
+                      const createdAction = state.actionId
+                        ? getActionById(state.actionId)
+                        : undefined;
 
                       if (!expanded) {
                         return (
@@ -2135,36 +2203,41 @@ function FiveSAuditExecution({
                                   </div>
                                 </div>
 
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="self-center"
-                                  disabled={!questionUnlocked}
-                                  variant={requiresAction ? "default" : "outline"}
-                                  onClick={() => openActionDialog(question)}
-                                >
-                                  {state.actionId ? <Eye className="mr-1.5 size-3.5" /> : <Plus className="mr-1.5 size-3.5" />}
-                                  {state.actionId ? `${t("common.view")} ${t("audit.action")}` : t("audit.addAction")}
-                                </Button>
-
-                                <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
-                                  {state.actionId && (
-                                    <>
-                                      <Badge variant="success">
-                                        <CheckCircle2 className="mr-1 size-3" />
-                                        {t("audit.actionCreated")}
-                                      </Badge>
-                                      {state.assignedTo && (
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-[11px]"
-                                        >
-                                          {t("audit.responsible")}: {state.assignedTo}
-                                        </Badge>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
+                                {createdAction ? (
+                                  <div className="min-w-0 rounded-lg border border-emerald-500/20 bg-background/80 p-3 shadow-sm">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400">
+                                      <CheckCircle2 className="size-3.5" />
+                                      {t("audit.actionCreated")}
+                                    </div>
+                                    <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-5">{createdAction.title}</p>
+                                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] sm:grid-cols-3">
+                                      <div className="min-w-0"><dt className="text-muted-foreground">Responsible</dt><dd className="mt-0.5 truncate font-medium">{createdAction.responsiblePersonName || createdAction.assignedTo || createdAction.zoneLeaderName || "Unassigned"}</dd></div>
+                                      <div><dt className="text-muted-foreground">Priority</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.priority === "Critical" || createdAction.priority === "High" ? "danger" : createdAction.priority === "Medium" ? "warning" : "info"}>{createdAction.priority}</Badge></dd></div>
+                                      <div><dt className="text-muted-foreground">Due</dt><dd className="mt-0.5 font-medium">{new Date(`${createdAction.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</dd></div>
+                                      <div><dt className="text-muted-foreground">Status</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.status === "Completed" ? "success" : createdAction.status === "Overdue" || createdAction.status === "Rework Required" ? "danger" : createdAction.status === "In Progress" || createdAction.status === "Pending Review" ? "warning" : "info"}>{createdAction.status}</Badge></dd></div>
+                                      {createdAction.actionCategory && <div className="min-w-0"><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 truncate font-medium">{createdAction.actionCategory}</dd></div>}
+                                      {createdAction.issueEvidence?.length ? <div><dt className="text-muted-foreground">Evidence</dt><dd className="mt-0.5 font-medium">{createdAction.issueEvidence.length} attached</dd></div> : null}
+                                    </dl>
+                                    <div className="mt-3 flex justify-end border-t border-border/60 pt-2">
+                                      <Button type="button" size="sm" variant="ghost" disabled={!questionUnlocked} onClick={() => openActionDialog(question)}>
+                                        <Eye className="mr-1.5 size-3.5" />
+                                        {t("common.view")} {t("audit.action")} <span aria-hidden="true">→</span>
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="self-center"
+                                    disabled={!questionUnlocked}
+                                    variant={requiresAction ? "default" : "outline"}
+                                    onClick={() => openActionDialog(question)}
+                                  >
+                                    <Plus className="mr-1.5 size-3.5" />
+                                    {t("audit.addAction")}
+                                  </Button>
+                                )}
                               </div>
 
                               {/* EVIDENCE */}
@@ -2357,6 +2430,14 @@ function FiveSAuditExecution({
           </main>
         </div>
       </div>
+
+      {fullScreen && activeSection && (
+        <footer className="mobile-safe-bottom sticky bottom-0 z-40 flex shrink-0 items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 shadow-[0_-10px_30px_-24px_rgb(15_23_42/0.5)] backdrop-blur md:px-8">
+          <Button type="button" variant="outline" disabled={activeSectionIndex === 0 && activeQuestionIndex === 0} onClick={() => navigateQuestion(-1)}>Previous</Button>
+          <p className="hidden text-xs text-muted-foreground sm:block">{auditSectionName(language, activeSection.category)} · Question {activeQuestionIndex + 1} of {activeSection.questions.length}</p>
+          <Button type="button" disabled={!isQuestionComplete(activeSection.questions[activeQuestionIndex]) || (activeSectionIndex === sections.length - 1 && activeQuestionIndex === activeSection.questions.length - 1)} onClick={() => navigateQuestion(1)}>Save &amp; Next <span aria-hidden="true">→</span></Button>
+        </footer>
+      )}
 
       {/* ACTION DIALOG */}
 
@@ -2645,7 +2726,7 @@ function ActionDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
       <div className="motion-success-in w-full max-w-2xl overflow-hidden rounded-xl border bg-background shadow-2xl">
         {/* DIALOG HEADER */}
 

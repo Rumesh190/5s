@@ -61,8 +61,9 @@ import {
   useActionStore,
 } from "@/lib/actions/action-store";
 import { useCurrentUser } from "@/lib/current-user";
-import { FIVE_S_ACTION_CATEGORIES } from "@/lib/five-s/configuration";
+import { FIVE_S_CORRECTIVE_ACTION_CATEGORIES } from "@/lib/five-s/configuration";
 import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage } from "@/lib/evidence-images";
+import { ACTION_LIFECYCLE_STAGES, getActionLifecycleStage, type ActionLifecycleStage } from "@/lib/five-s/lifecycle-status";
 
 import type {
   MyAction,
@@ -182,7 +183,7 @@ export default function MyActionsPage() {
   const [search, setSearch] = useState("");
 
   const [statusFilter, setStatusFilter] =
-    useState<"All" | MyActionStatus>("All");
+    useState<"All" | ActionLifecycleStage>("All");
 
   /*
    * UI-only field for the action progress section.
@@ -288,7 +289,7 @@ export default function MyActionsPage() {
     return roleActions.filter((action) => {
       const matchesStatus =
         statusFilter === "All" ||
-        action.status === statusFilter;
+        getActionLifecycleStage(action.status) === statusFilter;
 
       const matchesSearch =
         !query ||
@@ -373,7 +374,7 @@ export default function MyActionsPage() {
 
     const updatedAction = submitActionForReview(actionId, currentUser, {
       observation: actionTakenDescription,
-      actionCategory,
+      correctiveActionCategory: actionCategory,
       costSaving: Number(costSaving),
     });
 
@@ -885,10 +886,10 @@ export default function MyActionsPage() {
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="text-sm font-medium">Action Category</label>
+                        <label className="text-sm font-medium">Corrective Action Category</label>
                         <Select value={actionCategory} onValueChange={(value) => setActionCategory(value ?? "")}>
-                          <SelectTrigger className="mt-2 w-full"><SelectValue placeholder="Select action category" /></SelectTrigger>
-                          <SelectContent>{FIVE_S_ACTION_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent>
+                          <SelectTrigger className="mt-2 w-full"><SelectValue placeholder="Select corrective action category" /></SelectTrigger>
+                          <SelectContent>{FIVE_S_CORRECTIVE_ACTION_CATEGORIES.map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div>
@@ -908,7 +909,7 @@ export default function MyActionsPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium">
-                            Evidence
+                            Evidence <span className="text-destructive">*</span>
                           </p>
 
                           <p className="mt-1 text-xs text-muted-foreground">
@@ -1068,7 +1069,7 @@ export default function MyActionsPage() {
                       <Button
                         type="button"
                         className="w-full"
-                        disabled={!actionTakenDescription.trim() || !actionCategory || costSaving === "" || Number(costSaving) < 0 || !Number.isFinite(Number(costSaving))}
+                        disabled={!actionTakenDescription.trim() || !actionCategory || selectedAction.evidence.length === 0 || costSaving === "" || Number(costSaving) < 0 || !Number.isFinite(Number(costSaving))}
                         onClick={() =>
                           handleCompleteAction(
                             selectedAction.id
@@ -1080,7 +1081,7 @@ export default function MyActionsPage() {
                         Submit for Auditor Review
                       </Button>
 
-                      <p className="mt-2 text-center text-xs text-muted-foreground">Observation and Action Category are required. Evidence is optional.</p>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">Observation, Corrective Action Category, and evidence are required.</p>
                     </div>
                   </div>
                 </section>
@@ -1122,7 +1123,7 @@ export default function MyActionsPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg border bg-background p-3"><p className="text-xs text-muted-foreground">Action Category</p><p className="mt-1 text-sm font-medium">{selectedAction.actionCategory || "—"}</p></div>
+                      <div className="rounded-lg border bg-background p-3"><p className="text-xs text-muted-foreground">Corrective Action Category</p><p className="mt-1 text-sm font-medium">{selectedAction.correctiveActionCategory || "—"}</p></div>
                       <div className="rounded-lg border bg-background p-3"><p className="text-xs text-muted-foreground">Cost Saving</p><p className="mt-1 text-sm font-medium">₹{(selectedAction.costSaving ?? 0).toLocaleString("en-IN")}</p></div>
                     </div>
 
@@ -1510,19 +1511,7 @@ export default function MyActionsPage() {
                 ================================================= */}
 
             <div className="flex flex-wrap gap-2 pt-1">
-              {(
-                [
-                  "All",
-                  "Assigned",
-                  "Open",
-                  "In Progress",
-                  "Overdue",
-                  "Pending Review",
-                  "Awaiting Review",
-                  "Rework Required",
-                  "Completed",
-                ] as const
-              ).map((status) => (
+              {(["All", ...ACTION_LIFECYCLE_STAGES] as const).map((status) => (
                 <Button
                   key={status}
                   type="button"

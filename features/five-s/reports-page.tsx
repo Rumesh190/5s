@@ -18,6 +18,7 @@ import { ActionFlowChart, CostSavingTrend, ReportAuditTrend, type ReportTrendPoi
 import type { FiveSAudit } from "./types/five-s";
 import type { MyAction, MyActionEvidence } from "./types/my-actions";
 import { useI18n } from "@/components/preferences/use-i18n";
+import { ACTION_LIFECYCLE_STAGES, getActionLifecycleStage } from "@/lib/five-s/lifecycle-status";
 
 type Tab = "overview" | "audits" | "actions" | "improvements";
 type LibraryItem = { type: "audit"; audit: FiveSAudit; score: number; date: string } | { type: "action"; action: MyAction; date: string };
@@ -42,7 +43,7 @@ export default function FiveSReportsPage({ initialTab, initialSearch = "", initi
     const savingBuckets=new Map<string,{label:string;value:number}>();completedActions.forEach((action)=>{const bucket=monthKey(action.completedAt);if(!bucket)return;const current=savingBuckets.get(bucket.key)??{label:bucket.label,value:0};current.value+=action.costSaving??0;savingBuckets.set(bucket.key,current);});
     const auditTrend:Array<ReportTrendPoint>=[...auditBuckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([,v])=>({label:v.label,score:Math.round(v.sum/v.count)})); const savingTrend:Array<ReportTrendPoint>=[...savingBuckets.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([,v])=>v);
     const zoneRanking=FIVE_S_ZONE_CONFIGURATION.map((config)=>{const zoneAudits=completedAudits.filter((audit)=>audit.area===config.name);return{zone:config.name,leader:config.leader,score:zoneAudits.length?Math.round(zoneAudits.reduce((s,a)=>s+pct(a),0)/zoneAudits.length):0};}).sort((a,b)=>b.score-a.score);
-    const statusOrder=["Assigned","Open","In Progress","Pending Review","Rework Required","Completed"] as const; const statusFlow=statusOrder.map((status)=>({status,value:actions.filter((action)=>action.status===status).length})).filter((item)=>item.value);
+    const statusFlow=ACTION_LIFECYCLE_STAGES.map((status)=>({status,value:actions.filter((action)=>getActionLifecycleStage(action.status)===status).length})).filter((item)=>item.value);
     const trendChange=auditTrend.length>1?(auditTrend.at(-1)?.score??0)-(auditTrend.at(-2)?.score??0):0;
     return{score,totalSaving,closureRate,avgDays,overdue:actions.filter((a)=>a.status==="Overdue").length,rework:actions.length?Math.round(actions.filter((a)=>a.status==="Rework Required").length/actions.length*100):0,auditTrend,savingTrend,zoneRanking,statusFlow,trendChange};
   },[actions,completedActions,completedAudits]);

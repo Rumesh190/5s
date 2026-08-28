@@ -4,7 +4,7 @@ import FiveSPageHeader from "./components/FiveSPageHeader";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
@@ -39,15 +39,18 @@ import {
   ArrowRight,
   Clock3,
   CheckCircle2,
+  Download,
   ExternalLink,
   Image as ImageIcon,
   Plus,
+  Printer,
   Sparkles,
 } from "lucide-react";
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { canAuditZone } from "@/lib/five-s/configuration";
 import type { MyAction, MyActionEvidence, MyActionStatus } from "./types/my-actions";
 import { useI18n } from "@/components/preferences/use-i18n";
+import { MVP_DASHBOARD_DATA } from "./data/mvp-dashboard-data";
 
 type DashboardPeriod = "week" | "month" | "year" | "custom";
 type DashboardView = "overview" | "nc-summary" | "before-after";
@@ -335,21 +338,29 @@ export default function FiveSDashboardPage() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, value]) => value);
 
+    const useMvpDemo = period === "month" && !startDate && !endDate && zoneFilter === "All";
+    const demo = MVP_DASHBOARD_DATA;
+
     return {
-      averageScore,
-      topZone: zonePerformance[0],
+      totalAudits: useMvpDemo ? demo.summary.totalAudits : filteredAudits.length,
+      completedAudits: useMvpDemo ? demo.summary.completedAudits : filteredAudits.filter((item) => item.status === "Completed").length,
+      draftAudits: useMvpDemo ? demo.summary.draftAudits : filteredAudits.filter((item) => item.status === "Draft").length,
+      inProgressAudits: useMvpDemo ? demo.summary.inProgressAudits : filteredAudits.filter((item) => item.status === "In Progress").length,
+      nonCompliances: useMvpDemo ? demo.summary.nonCompliances : filteredActions.length,
+      averageScore: useMvpDemo ? demo.summary.averageScore : averageScore,
+      topZone: useMvpDemo ? demo.zonePerformance[0] : zonePerformance[0],
       totalActions: filteredActions.length,
-      openActions,
-      completedActions,
-      overdueActions,
+      openActions: useMvpDemo ? demo.summary.openActions : openActions,
+      completedActions: useMvpDemo ? demo.summary.completedActions : completedActions,
+      overdueActions: useMvpDemo ? demo.summary.overdueActions : overdueActions,
       closureRate,
-      zonePerformance,
-      auditTrend,
+      zonePerformance: useMvpDemo ? [...demo.zonePerformance] : zonePerformance,
+      auditTrend: useMvpDemo ? [...demo.auditTrend] : auditTrend,
       trendChange,
       statusCounts,
       averageClosureDays,
-      nonComplianceByZone,
-      improvementTrend,
+      nonComplianceByZone: useMvpDemo ? [...demo.nonComplianceByZone] : nonComplianceByZone,
+      improvementTrend: useMvpDemo ? [...demo.improvementTrend] : improvementTrend,
       filteredActions,
       attention: filteredActions.filter((action) => action.status !== "Completed").sort((a,b) => attentionRank(b) - attentionRank(a) || a.dueDate.localeCompare(b.dueDate)).slice(0, 5),
       improvements: filteredActions.filter((action) => action.status === "Completed").sort((a,b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "")).slice(0, 3),
@@ -522,13 +533,17 @@ export default function FiveSDashboardPage() {
         </div>
       </div>
 
-      {dashboardView === "overview" && <section className="grid min-w-0 gap-4 xl:grid-cols-[180px_minmax(0,1fr)]">
-        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 xl:auto-rows-fr xl:grid-cols-1">
+      {dashboardView === "overview" && <section className="grid min-w-0 gap-4">
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <DashboardKpi value={metrics.totalAudits} label="Total audits" tone="info" />
+          <DashboardKpi value={metrics.completedAudits} label="Completed audits" tone="success" />
+          <DashboardKpi value={metrics.draftAudits} label="Draft audits" tone="warning" />
+          <DashboardKpi value={metrics.inProgressAudits} label="In progress" tone="info" />
           <DashboardKpi value={`${metrics.averageScore}%`} label={t("dashboard.auditScore")} tone={metrics.averageScore < 60 ? "danger" : metrics.averageScore < 80 ? "warning" : "success"} />
-          <DashboardKpi value={metrics.topZone?.zone ?? "—"} label={t("dashboard.topZone")} detail={metrics.topZone ? `${metrics.topZone.score}% score` : "No audit data"} />
-          <DashboardKpi value={metrics.totalActions} label={t("dashboard.nonCompliance")} tone="danger" />
-          <DashboardKpi value={metrics.completedActions} label={t("dashboard.closed")} tone="success" />
-          <DashboardKpi value={metrics.completedActions} label={t("dashboard.improvements")} tone="info" />
+          <DashboardKpi value={metrics.openActions} label="Open actions" tone="warning" />
+          <DashboardKpi value={metrics.overdueActions} label="Overdue actions" tone="danger" />
+          <DashboardKpi value={metrics.completedActions} label="Closed actions" tone="success" />
+          <DashboardKpi value={metrics.nonCompliances} label="Non-compliances" tone="danger" />
         </div>
 
         <div className="grid min-w-0 gap-4 lg:grid-cols-2">
@@ -567,11 +582,20 @@ export default function FiveSDashboardPage() {
 }
 
 function NCSummaryTable({ actions, onPreview, onOpen, onReport }: { actions: MyAction[]; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
+  const [selectedZone, setSelectedZone] = useState("All");
+  const zones = useMemo(() => ["Zone A", "Zone B", "Zone C", "Zone D"], []);
+  const activeZone = selectedZone === "All" || zones.includes(selectedZone) ? selectedZone : "All";
+  const filteredActions = activeZone === "All" ? actions : actions.filter((action) => action.area === activeZone);
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="border-b bg-muted/15">
-        <CardTitle className="text-base">Non-compliance summary</CardTitle>
-        <p className="text-sm text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p>
+      <CardHeader className="grid-cols-1 gap-x-6 gap-y-3 border-b bg-muted/15 pb-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:pb-6">
+        <div className="min-w-0"><CardTitle className="text-base">Non-compliance summary</CardTitle><p className="mt-1 text-sm leading-5 text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p></div>
+        <CardAction className="col-start-1 row-start-2 w-full justify-self-stretch sm:col-start-2 sm:row-span-1 sm:row-start-1 sm:w-auto sm:justify-self-end">
+          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
+            <DashboardFilter value={activeZone} onChange={setSelectedZone} label="All zones" options={zones} />
+            <Button type="button" size="sm" variant="outline" className="w-full bg-background shadow-none sm:w-auto" onClick={() => exportNonComplianceCsv(filteredActions)}><Download className="size-4" /> Export CSV</Button>
+          </div>
+        </CardAction>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
@@ -580,7 +604,7 @@ function NCSummaryTable({ actions, onPreview, onOpen, onReport }: { actions: MyA
               <tr>{["Zone", "Observed", "Problem description", "Before", "Responsible", "Status", "Due date", "Action taken", "After", "Closed", "Report"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-4 py-3 font-semibold">{heading}</th>)}</tr>
             </thead>
             <tbody className="divide-y">
-              {actions.length ? actions.map((action) => {
+              {filteredActions.length ? filteredActions.map((action) => {
                 const before = action.issueEvidence?.find((item) => item.type === "image" && item.url);
                 const after = action.evidence.find((item) => item.type === "image" && item.url);
                 return <tr key={action.id} className="bg-card align-top transition-colors hover:bg-muted/20">
@@ -614,11 +638,22 @@ function BeforeAfterView({ action, actions, onSelect, onPreview, onReport }: { a
   if (!action) return <Card><CardContent className="grid min-h-72 place-items-center text-sm text-muted-foreground">No non-compliance records are available for this view.</CardContent></Card>;
   const before = action.issueEvidence?.find((item) => item.type === "image" && item.url);
   const after = action.evidence.find((item) => item.type === "image" && item.url);
+  const handlePrint = () => {
+    const previousTitle = document.title;
+    document.title = `5S-Before-After-Report-${new Date().toISOString().slice(0, 10)}`;
+    window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
+    window.print();
+  };
   return (
     <Card className="min-w-0 overflow-hidden">
-      <CardHeader className="gap-4 border-b bg-muted/15 sm:flex-row sm:items-center sm:justify-between">
-        <div><CardTitle className="text-base">Before &amp; After</CardTitle><p className="mt-1 text-sm text-muted-foreground">Visual evidence and closure outcome for the selected non-compliance.</p></div>
-        <DashboardFilter value={action.id} onChange={onSelect} label="Select finding" options={actions.map((item) => item.id)} />
+      <CardHeader className="grid-cols-1 gap-x-6 gap-y-3 border-b bg-muted/15 pb-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:pb-6">
+        <div className="min-w-0"><CardTitle className="text-base">Before &amp; After</CardTitle><p className="mt-1 text-sm leading-5 text-muted-foreground">Visual evidence and closure outcome for the selected non-compliance.</p></div>
+        <CardAction className="col-start-1 row-start-2 w-full justify-self-stretch sm:col-start-2 sm:row-span-1 sm:row-start-1 sm:w-auto sm:justify-self-end">
+          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+            <DashboardFilter value={action.id} onChange={onSelect} label="Select finding" options={actions.map((item) => item.id)} />
+            <Button type="button" size="sm" variant="outline" className="bg-background shadow-none" onClick={handlePrint}><Printer className="size-4" /> Print / Save PDF</Button>
+          </div>
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-5 p-4 sm:p-6">
         <div className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-2 lg:grid-cols-4">
@@ -632,6 +667,7 @@ function BeforeAfterView({ action, actions, onSelect, onPreview, onReport }: { a
         </div>
         {action.status === "Completed" && <div className="flex justify-end"><Button type="button" variant="outline" onClick={() => onReport(action)}>Open improvement report<ExternalLink className="size-4" /></Button></div>}
       </CardContent>
+      <BeforeAfterPrintReport actions={actions} />
     </Card>
   );
 }
@@ -670,6 +706,21 @@ function PriorityBadge({ priority }: { priority: MyAction["priority"] }) { retur
 function ImprovementSpotlight({ action, onPreview, onOpen }: { action: MyAction; onPreview: (evidence: MyActionEvidence) => void; onOpen: () => void }) { const before = action.issueEvidence?.find((evidence)=>evidence.type === "image" && evidence.url); const after = action.evidence.find((evidence)=>evidence.type === "image" && evidence.url); return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><p className="text-[11px] font-bold uppercase tracking-[.12em] text-primary">Improvement Spotlight</p><CardTitle className="mt-2 line-clamp-2 text-base">{action.title}</CardTitle><p className="mt-1 truncate text-xs text-muted-foreground">{action.area} · {action.category ?? "5S"}</p></div><Badge variant="success">Completed</Badge></div></CardHeader><CardContent className="p-4 sm:p-5"><div className="grid gap-3 sm:grid-cols-[1fr_28px_1fr] sm:items-center"><button onClick={()=>before&&onPreview(before)} disabled={!before} className="min-w-0 text-left"><ComparisonImage label="Before" evidence={before} /></button><ArrowRight className="mx-auto hidden size-4 text-primary sm:block" /><button onClick={()=>after&&onPreview(after)} disabled={!after} className="min-w-0 text-left"><ComparisonImage label="After" evidence={after} /></button></div><div className="mt-4 flex min-w-0 flex-wrap items-end justify-between gap-3 border-t pt-4"><div className="min-w-0 text-xs text-muted-foreground"><p className="truncate">Completed by <b className="text-foreground">{action.completedByName ?? action.responsiblePersonName ?? action.assignedTo}</b></p><p className="mt-1 truncate">Reviewed by <b className="text-foreground">{action.reviewedBy ?? action.auditor ?? "—"}</b></p></div><div className="text-right"><p className="break-all text-xl font-bold text-emerald-700 dark:text-emerald-400">₹{(action.costSaving ?? 0).toLocaleString("en-IN")}</p><p className="text-[10px] text-muted-foreground">{action.costSaving ? "Cost saving" : "Recorded"}</p></div></div><Button variant="ghost" size="sm" className="mt-3 w-full" onClick={onOpen}>View Improvement Report <ArrowRight className="size-4" /></Button></CardContent></Card>; }
 
 function formatDashboardDate(value?: string) { if (!value) return "—"; const date = new Date(value.includes("T") ? value : `${value}T00:00:00`); return new Intl.DateTimeFormat("en-IN",{day:"2-digit",month:"short",year:"numeric"}).format(date); }
+
+function csvCell(value: unknown) { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
+function exportNonComplianceCsv(actions: MyAction[]) {
+  const headings = ["Audit ID", "Date", "Zone", "5S Section", "Question", "Compliance Status", "Observation", "Responsible Person", "Action Status", "Priority", "Due Date"];
+  const rows = actions.map((action) => [action.auditId ?? action.sourceTitle, action.createdAt, action.area, action.category, action.questionText, action.status === "Completed" ? "Closed" : "Non-Compliance", action.originalFinding ?? action.description, action.responsiblePersonName ?? action.assignedTo, action.status, action.priority, action.dueDate]);
+  const csv = [headings, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = `5S-Non-Compliance-Summary-${new Date().toISOString().slice(0, 10)}.csv`; link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function BeforeAfterPrintReport({ actions }: { actions: MyAction[] }) {
+  return <section className="before-after-print-report hidden bg-white text-slate-950 print:block"><header><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">5S operational excellence</p><h1 className="mt-2 text-2xl font-bold">5S Before &amp; After Report</h1><p className="mt-1 text-sm text-slate-500">Generated {formatDashboardDate(new Date().toISOString())}</p></header><div className="mt-6 space-y-6">{actions.map((item) => { const before=item.issueEvidence?.find((e)=>e.type==="image"&&e.url); const after=item.evidence.find((e)=>e.type==="image"&&e.url); return <article key={item.id} className="before-after-print-pair break-inside-avoid rounded-lg border border-slate-300 p-4"><div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-700">{item.auditId ?? item.sourceTitle} · {item.area} · {item.category}</p><h2 className="mt-1 text-lg font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.originalFinding ?? item.description}</p></div><span className="text-sm font-semibold">{item.status}</span></div><div className="mt-4 grid grid-cols-2 gap-4">{[["Before",before],["After",after]].map(([label,evidence])=><div key={String(label)}><p className="mb-2 text-xs font-bold uppercase">{String(label)}</p>{typeof evidence === "object" && evidence?.url ? <img src={evidence.url} alt={evidence.name} className="aspect-[16/10] w-full rounded border object-contain" /> : <div className="grid aspect-[16/10] place-items-center rounded border bg-slate-50 text-sm text-slate-400">No image attached</div>}</div>)}</div><dl className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><dt className="text-slate-500">Responsible</dt><dd className="font-semibold">{item.responsiblePersonName ?? item.assignedTo ?? "—"}</dd></div><div><dt className="text-slate-500">Completed</dt><dd className="font-semibold">{formatDashboardDate(item.completedAt)}</dd></div><div><dt className="text-slate-500">Auditor / reviewer</dt><dd className="font-semibold">{item.reviewedBy ?? item.auditor ?? "—"}</dd></div><div><dt className="text-slate-500">Due date</dt><dd className="font-semibold">{formatDashboardDate(item.dueDate)}</dd></div></dl></article>; })}</div></section>;
+}
 
 function ActionStatusBadge({ status }: { status: MyActionStatus }) { const variant = status === "Completed" ? "success" : status === "Overdue" || status === "Rework Required" ? "danger" : status === "In Progress" || status === "Pending Review" ? "warning" : "info"; return <Badge variant={variant}>{status}</Badge>; }
 
