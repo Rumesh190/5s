@@ -77,6 +77,7 @@ import { optimizeEvidenceImage, MAX_EVIDENCE_IMAGES } from "@/lib/evidence-image
 
 import { createAction, getActionById, updateAction } from "@/lib/actions/action-store";
 import { updateFiveSAudit } from "@/lib/five-s/audit-store";
+import { AUDIT_LIFECYCLE_STAGES } from "@/lib/five-s/lifecycle-status";
 import { useCurrentUser } from "@/lib/current-user";
 import {
   FIVE_S_ACTION_CATEGORIES,
@@ -182,12 +183,10 @@ const SCORE_INDICATOR_STYLES: Record<number, string> = {
   2: "border-green-300 bg-green-50 text-green-700 dark:border-green-500/35 dark:bg-green-500/10 dark:text-green-300",
 };
 
-const AUDIT_LIFECYCLE = ["Start", "Draft", "In Progress", "Completion"];
-
 function AuditLifecycleTimeline({ currentIndex }: { currentIndex: number }) {
   return (
     <div className="flex min-w-[360px] flex-1 items-center" aria-label="Audit lifecycle">
-      {AUDIT_LIFECYCLE.map((label, index) => {
+      {AUDIT_LIFECYCLE_STAGES.map((label, index) => {
         const complete = index < currentIndex;
         const current = index === currentIndex;
 
@@ -196,7 +195,7 @@ function AuditLifecycleTimeline({ currentIndex }: { currentIndex: number }) {
             <span className={`relative z-10 flex size-5 shrink-0 items-center justify-center rounded-full border text-[9px] ${complete ? "border-emerald-500 bg-emerald-500 text-white" : current ? "border-primary bg-primary text-primary-foreground ring-4 ring-primary/10" : "border-border bg-background text-muted-foreground"}`}>
               {complete ? <Check className="size-3" /> : index + 1}
             </span>
-            {index < AUDIT_LIFECYCLE.length - 1 && <span className={`absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px ${index < currentIndex ? "bg-emerald-400" : "bg-border"}`} />}
+            {index < AUDIT_LIFECYCLE_STAGES.length - 1 && <span className={`absolute left-[calc(50%+10px)] right-[calc(-50%+10px)] top-2.5 h-px ${index < currentIndex ? "bg-emerald-400" : "bg-border"}`} />}
             <span className={`min-w-0 text-xs leading-4 ${current ? "font-semibold text-primary" : complete ? "font-medium text-foreground" : "font-medium text-muted-foreground"}`}>{label}</span>
           </div>
         );
@@ -369,6 +368,9 @@ function FiveSAuditExecution({
     activeQuestionIndex,
     setActiveQuestionIndex,
   ] = useState(0);
+  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(
+    () => sections[0]?.questions[0]?.id ?? null
+  );
   const [navigationDirection, setNavigationDirection] = useState<"forward" | "backward">("forward");
 
   const [
@@ -497,17 +499,17 @@ function FiveSAuditExecution({
         )
       : 0;
 
+  const auditReadyForCompletion =
+    allQuestions.length > 0 && answeredQuestions === allQuestions.length;
+
   const auditLifecycleIndex =
     audit.status === "Completed"
       ? 3
-      : audit.status === "In Progress"
+      : auditReadyForCompletion || showReview
         ? 2
-        : answeredQuestions > 0 || hasSavedDraft
+        : audit.status === "In Progress" || answeredQuestions > 0 || hasSavedDraft
           ? 1
           : 0;
-
-  const auditReadyForCompletion =
-    allQuestions.length > 0 && answeredQuestions === allQuestions.length;
 
   const totalMaxScore =
     allQuestions.length * 2;
@@ -665,6 +667,7 @@ function FiveSAuditExecution({
       setNavigationDirection("forward");
       setActiveSectionIndex(nextSectionIndex);
       setActiveQuestionIndex(targetQuestionIndex);
+      setExpandedQuestionId(targetId);
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           questionItemRefs.current[targetId]?.scrollIntoView({
@@ -1229,13 +1232,33 @@ function FiveSAuditExecution({
     });
   }
 
+  function revealQuestionOnMobile(questionId: string) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (!window.matchMedia("(max-width: 1023px), (pointer: coarse)").matches) return;
+        const element = questionItemRefs.current[questionId];
+        if (!element) return;
+        const bounds = element.getBoundingClientRect();
+        if (bounds.top < 72 || bounds.bottom > window.innerHeight - 16) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    });
+  }
+
+  function expandQuestion(questionId: string, questionIndex: number) {
+    setNavigationDirection(questionIndex >= activeQuestionIndex ? "forward" : "backward");
+    setActiveQuestionIndex(questionIndex);
+    setExpandedQuestionId(questionId);
+    revealQuestionOnMobile(questionId);
+  }
+
   function navigateToSection(sectionIndex: number) {
     setNavigationDirection(sectionIndex >= activeSectionIndex ? "forward" : "backward");
     setActiveSectionIndex(sectionIndex);
-    const firstIncomplete = sections[sectionIndex]?.questions.findIndex(
-      (question) => !isQuestionComplete(question)
-    ) ?? -1;
-    setActiveQuestionIndex(firstIncomplete >= 0 ? firstIncomplete : 0);
+    const firstQuestion = sections[sectionIndex]?.questions[0];
+    setActiveQuestionIndex(0);
+    setExpandedQuestionId(firstQuestion?.id ?? null);
     resetQuestionScroll();
   }
 
@@ -1256,6 +1279,7 @@ function FiveSAuditExecution({
     setNavigationDirection(direction === 1 ? "forward" : "backward");
     setActiveSectionIndex(sectionIndex);
     setActiveQuestionIndex(questionIndex);
+    setExpandedQuestionId(sections[sectionIndex]?.questions[questionIndex]?.id ?? null);
     resetQuestionScroll();
   }
 
@@ -1810,7 +1834,10 @@ function FiveSAuditExecution({
 
       {/* AUDIT SECTION RAIL + QUESTION WORKSPACE */}
 
-      <div ref={questionScrollRef} className="w-full min-w-0 max-w-full flex-1 px-0 py-4 md:min-h-0 md:overflow-y-auto md:px-6 lg:overflow-hidden lg:px-8">
+      <div
+        ref={questionScrollRef}
+        className={`w-full min-w-0 max-w-full flex-1 touch-pan-y px-0 py-4 [-webkit-overflow-scrolling:touch] md:min-h-0 md:px-6 lg:px-8 ${fullScreen ? "min-h-0 overflow-y-auto overscroll-contain" : "overflow-visible md:overflow-y-auto lg:overflow-hidden"}`}
+      >
         <div className={`mx-auto grid w-full min-w-0 gap-4 lg:h-full lg:min-h-0 ${fullScreen ? "max-w-[1280px]" : "max-w-[1600px] lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]"}`}>
           <aside className={fullScreen ? "hidden" : "hidden min-w-0 lg:block lg:h-full lg:min-h-0"}>
             <div className="flex h-full min-w-0 flex-col rounded-xl border border-border/75 bg-card p-3 shadow-sm">
@@ -1936,7 +1963,7 @@ function FiveSAuditExecution({
                           1;
 
                       const questionUnlocked = true;
-                      const expanded = questionIndex === activeQuestionIndex;
+                      const expanded = question.id === expandedQuestionId;
                       const complete = isQuestionComplete(question);
                       const createdAction = state.actionId
                         ? getActionById(state.actionId)
@@ -1947,7 +1974,7 @@ function FiveSAuditExecution({
                           <div
                             key={question.id}
                             ref={(element) => { questionItemRefs.current[question.id] = element; }}
-                            className="relative min-w-0 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden"
+                            className="relative min-w-0 scroll-mt-20 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden"
                           >
                             <span className={`absolute left-0 top-3.5 z-10 flex size-6 items-center justify-center rounded-full border bg-background ${state.score === 2 ? "border-emerald-500 text-emerald-600" : state.score === 1 ? "border-amber-500 text-amber-600" : state.score === 0 ? "border-red-500 text-red-600" : "border-border text-muted-foreground"}`}>
                               {complete ? <Check className="size-3.5" /> : state.score === 0 ? <AlertCircle className="size-3.5" /> : <span className="size-1.5 rounded-full bg-current" />}
@@ -1957,11 +1984,8 @@ function FiveSAuditExecution({
                               type="button"
                               aria-expanded="false"
                               aria-controls={`audit-question-panel-${question.id}`}
-                              onClick={() => {
-                                setNavigationDirection(questionIndex >= activeQuestionIndex ? "forward" : "backward");
-                                setActiveQuestionIndex(questionIndex);
-                              }}
-                              className="flex min-w-0 flex-1 items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => expandQuestion(question.id, questionIndex)}
+                              className="flex min-h-12 min-w-0 flex-1 touch-manipulation items-start gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               <span className="pt-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">{String(questionIndex + 1).padStart(2, "0")}</span>
                               <span className="min-w-0 flex-1">
@@ -2003,8 +2027,8 @@ function FiveSAuditExecution({
                             type="button"
                             aria-expanded="true"
                             aria-controls={`audit-question-panel-${question.id}`}
-                            onClick={() => setActiveQuestionIndex(-1)}
-                            className="flex w-full min-w-0 max-w-full gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => setExpandedQuestionId(null)}
+                            className="flex min-h-11 w-full min-w-0 max-w-full touch-manipulation gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                               {questionIndex + 1}

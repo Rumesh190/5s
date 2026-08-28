@@ -113,8 +113,9 @@ const DATE_RANGE_OPTIONS: {
    ========================================================= */
 
 function getLifecycleStatusVariant(stage: AuditLifecycleStage) {
-  if (stage === "Completion") return "success" as const;
-  if (stage === "In Progress") return "warning" as const;
+  if (stage === "Completed") return "success" as const;
+  if (stage === "Review") return "warning" as const;
+  if (stage === "In Progress") return "info" as const;
   if (stage === "Draft") return "info" as const;
   return "muted" as const;
 }

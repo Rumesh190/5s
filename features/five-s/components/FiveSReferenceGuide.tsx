@@ -63,6 +63,7 @@ export default function FiveSReferenceGuide({ question, questionText }: { questi
               size="icon"
               className="size-10 shrink-0 text-muted-foreground hover:text-primary"
               aria-label={t("audit.viewReference")}
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 setOpen(true);
