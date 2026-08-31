@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BarChart3, CheckCircle2, ClipboardCheck, Copy, Eye, FileText, Image as ImageIcon, IndianRupee, Link2, Printer, Search, Share2, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Copy, Eye, FileText, Image as ImageIcon, Printer, Search, Share2, Sparkles } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";

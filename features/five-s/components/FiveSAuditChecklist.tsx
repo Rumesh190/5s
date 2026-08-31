@@ -19,7 +19,6 @@ import {
   Paperclip,
   Plus,
   Save,
-  Upload,
   X,
 } from "lucide-react";
 
@@ -887,7 +886,8 @@ function FiveSAuditExecution({
     file: File,
     type:
       | "image"
-      | "document"
+      | "document",
+    evidenceId: number
   ) {
     if (
       !selectedEvidenceQuestion
@@ -903,7 +903,7 @@ function FiveSAuditExecution({
 
       const evidence: FiveSEvidence =
         {
-          id: `EV-${Date.now()}`,
+          id: `EV-${evidenceId}`,
 
           name: file.name,
 
@@ -1001,7 +1001,8 @@ function FiveSAuditExecution({
       file,
       isImage
         ? "image"
-        : "document"
+        : "document",
+      Date.now()
     );
 
     event.target.value = "";

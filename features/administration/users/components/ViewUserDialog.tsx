@@ -73,7 +73,7 @@ export default function ViewUserDialog({
           <DialogTitle>User Details</DialogTitle>
 
           <DialogDescription>
-            View the user's account and organizational details.
+            View the user&apos;s account and organizational details.
           </DialogDescription>
         </DialogHeader>
 

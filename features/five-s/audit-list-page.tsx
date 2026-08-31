@@ -255,9 +255,7 @@ export default function FiveSAuditListPage() {
      COMPLETE AUDIT
      ======================================================= */
 
-  function handleCompleteAudit(
-    completedAudit: FiveSAudit
-  ) {
+  function handleCompleteAudit() {
     // The execution component is responsible
     // for updating the audit during assessment.
     // Returning here simply closes the execution view.

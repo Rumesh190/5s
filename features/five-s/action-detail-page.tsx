@@ -117,10 +117,15 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
   useEffect(() => {
     if (!action) return;
-    setObservation(action.resolutionObservation ?? action.actionTakenDescription ?? "");
-    setCategory(action.correctiveActionCategory ?? "");
-    setCostSaving(String(action.costSaving ?? 0));
-  }, [action?.id]);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setObservation(action.resolutionObservation ?? action.actionTakenDescription ?? "");
+      setCategory(action.correctiveActionCategory ?? "");
+      setCostSaving(String(action.costSaving ?? 0));
+    });
+    return () => { cancelled = true; };
+  }, [action]);
 
   const latestRework = useMemo(
     () => [...(action?.reviewHistory ?? [])].reverse().find((item) => item.type === "sent_back"),

@@ -92,13 +92,17 @@ export default function EditRoleDialog({
     );
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setName(role.name);
       setDescription(role.description);
       setPermissions(
         clonePermissions(role.permissions)
       );
-    }
+    });
+    return () => { cancelled = true; };
   }, [open, role]);
 
   function resetForm() {

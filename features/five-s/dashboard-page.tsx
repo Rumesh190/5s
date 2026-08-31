@@ -35,16 +35,11 @@ import type {
 } from "./types/five-s";
 
 import {
-  AlertTriangle,
-  ArrowRight,
-  Clock3,
-  CheckCircle2,
   Download,
   ExternalLink,
   Image as ImageIcon,
   Plus,
   Printer,
-  Sparkles,
 } from "lucide-react";
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { canAuditZone } from "@/lib/five-s/configuration";
@@ -422,17 +417,6 @@ export default function FiveSDashboardPage() {
      UPDATE AUDIT
      ======================================================= */
 
-  function handleAuditUpdate(
-    updatedAudit: FiveSAudit
-  ) {
-    updateFiveSAudit(
-      updatedAudit.id,
-      updatedAudit
-    );
-
-    setSelectedAudit(updatedAudit);
-  }
-
   /* =======================================================
      COMPLETE AUDIT
      ======================================================= */
@@ -691,20 +675,6 @@ function DashboardKpi({ value, label, detail, tone = "neutral" }: { value: strin
 
 function DashboardFilter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <Select value={value} onValueChange={(next)=>onChange(next ?? "All")}><SelectTrigger className="h-9 min-w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">{label}</SelectItem>{options.map((option)=><SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select>; }
 
-function healthLabel(score: number) { return score >= 80 ? "Healthy" : score >= 60 ? "Moderate" : "Needs Attention"; }
-
-function HealthGauge({ score }: { score: number }) { const color = score < 60 ? "#dc2626" : score < 80 ? "#d97706" : "#16a34a"; return <div className="relative size-32 shrink-0 rounded-full" style={{ background: `conic-gradient(${color} ${Math.max(0, Math.min(100, score)) * 3.6}deg, var(--muted) 0)` }} aria-label={`Overall 5S health ${score}%`} role="img"><div className="absolute inset-[13px] grid place-items-center rounded-full bg-card"><span className="text-2xl font-bold">{score}%</span></div></div>; }
-
-function ExecutiveMetric({ label, value, detail, icon: Icon, tone }: { label: string; value: number; detail: string; icon: typeof AlertTriangle; tone: "danger" | "warning" | "success" | "info" }) { const tones = { danger: "bg-red-500/10 text-red-600 dark:text-red-400", warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400", success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400", info: "bg-primary/10 text-primary" }; return <div className="flex min-h-32 flex-col justify-between gap-3 p-5"><div className={`grid size-8 place-items-center rounded-lg ${tones[tone]}`}><Icon className="size-4" /></div><div><p className="text-2xl font-bold tracking-tight">{value}</p><p className="text-sm font-semibold">{label}</p><p className="mt-0.5 text-xs text-muted-foreground">{detail}</p></div></div>; }
-
-function ZoneRanking({ data }: { data: Array<{ zone: string; score: number; leader: string }> }) { const { t } = useI18n(); return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><CardTitle className="text-base">{t("dashboard.zonePerformance")}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{t("dashboard.auditScore")}</p></CardHeader><CardContent className="space-y-4 p-5">{data.length ? data.map((zone,index)=><div key={zone.zone} className="grid grid-cols-[24px_1fr_auto] items-center gap-3"><span className="grid size-6 place-items-center rounded-full bg-muted text-[11px] font-bold">{index+1}</span><div className="min-w-0"><div className="flex justify-between gap-2 text-sm"><span className="font-semibold">{zone.zone}</span><span className="font-bold">{zone.score}%</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{width:`${zone.score}%`}} /></div><p className="mt-1 text-[11px] text-muted-foreground">{zone.leader}</p></div></div>) : null}</CardContent></Card>; }
-
-function ActionHealth({ total, counts, closureRate, averageDays }: { total: number; counts: Record<string, number>; closureRate: number; averageDays: number }) { const { t } = useI18n(); const rows = ["Assigned","In Progress","Pending Review","Rework Required","Overdue","Completed"]; return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><div className="flex items-start justify-between"><div><CardTitle className="text-base">{t("dashboard.actionHealth")}</CardTitle></div><div className="text-right"><p className="text-2xl font-bold">{total}</p><p className="text-[10px] uppercase text-muted-foreground">{t("dashboard.total")}</p></div></div></CardHeader><CardContent className="p-5"><div className="space-y-2.5">{rows.map((status)=><div key={status} className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{status}</span><span className="font-semibold">{counts[status] ?? 0}</span></div>)}</div><div className="mt-4 grid grid-cols-2 gap-2 border-t pt-4"><div><p className="text-lg font-bold">{closureRate}%</p><p className="text-[10px] text-muted-foreground">{t("dashboard.closureRate")}</p></div><div><p className="text-lg font-bold">{averageDays ? `${averageDays.toFixed(1)}d` : "—"}</p><p className="text-[10px] text-muted-foreground">{t("dashboard.averageClosure")}</p></div></div></CardContent></Card>; }
-
-function PriorityBadge({ priority }: { priority: MyAction["priority"] }) { return <Badge variant={priority === "Critical" || priority === "High" ? "danger" : priority === "Medium" ? "warning" : "info"}>{priority}</Badge>; }
-
-function ImprovementSpotlight({ action, onPreview, onOpen }: { action: MyAction; onPreview: (evidence: MyActionEvidence) => void; onOpen: () => void }) { const before = action.issueEvidence?.find((evidence)=>evidence.type === "image" && evidence.url); const after = action.evidence.find((evidence)=>evidence.type === "image" && evidence.url); return <Card className="min-w-0 overflow-hidden"><CardHeader className="border-b"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><p className="text-[11px] font-bold uppercase tracking-[.12em] text-primary">Improvement Spotlight</p><CardTitle className="mt-2 line-clamp-2 text-base">{action.title}</CardTitle><p className="mt-1 truncate text-xs text-muted-foreground">{action.area} · {action.category ?? "5S"}</p></div><Badge variant="success">Completed</Badge></div></CardHeader><CardContent className="p-4 sm:p-5"><div className="grid gap-3 sm:grid-cols-[1fr_28px_1fr] sm:items-center"><button onClick={()=>before&&onPreview(before)} disabled={!before} className="min-w-0 text-left"><ComparisonImage label="Before" evidence={before} /></button><ArrowRight className="mx-auto hidden size-4 text-primary sm:block" /><button onClick={()=>after&&onPreview(after)} disabled={!after} className="min-w-0 text-left"><ComparisonImage label="After" evidence={after} /></button></div><div className="mt-4 flex min-w-0 flex-wrap items-end justify-between gap-3 border-t pt-4"><div className="min-w-0 text-xs text-muted-foreground"><p className="truncate">Completed by <b className="text-foreground">{action.completedByName ?? action.responsiblePersonName ?? action.assignedTo}</b></p><p className="mt-1 truncate">Reviewed by <b className="text-foreground">{action.reviewedBy ?? action.auditor ?? "—"}</b></p></div><div className="text-right"><p className="break-all text-xl font-bold text-emerald-700 dark:text-emerald-400">₹{(action.costSaving ?? 0).toLocaleString("en-IN")}</p><p className="text-[10px] text-muted-foreground">{action.costSaving ? "Cost saving" : "Recorded"}</p></div></div><Button variant="ghost" size="sm" className="mt-3 w-full" onClick={onOpen}>View Improvement Report <ArrowRight className="size-4" /></Button></CardContent></Card>; }
-
 function formatDashboardDate(value?: string) { if (!value) return "—"; const date = new Date(value.includes("T") ? value : `${value}T00:00:00`); return new Intl.DateTimeFormat("en-IN",{day:"2-digit",month:"short",year:"numeric"}).format(date); }
 
 function csvCell(value: unknown) { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
@@ -723,6 +693,3 @@ function BeforeAfterPrintReport({ actions }: { actions: MyAction[] }) {
 }
 
 function ActionStatusBadge({ status }: { status: MyActionStatus }) { const variant = status === "Completed" ? "success" : status === "Overdue" || status === "Rework Required" ? "danger" : status === "In Progress" || status === "Pending Review" ? "warning" : "info"; return <Badge variant={variant}>{status}</Badge>; }
-
-function ImprovementCard({ action, onOpen }: { action: MyAction; onOpen: () => void }) { const before = action.issueEvidence?.find((evidence)=>evidence.type === "image" && evidence.url); const after = action.evidence.find((evidence)=>evidence.type === "image" && evidence.url); return <Card className="overflow-hidden transition hover:border-primary/30 hover:shadow-md"><button className="block w-full text-left" onClick={onOpen}><div className="flex items-start justify-between gap-3 border-b px-4 py-3"><div><p className="text-[11px] font-semibold uppercase tracking-wide text-primary">{action.area} · {action.category ?? "5S"}</p><h3 className="mt-1 font-semibold">{action.title}</h3></div><Badge variant="success">Completed</Badge></div><div className="grid grid-cols-[1fr_28px_1fr] items-center gap-2 p-4"><ComparisonImage label="Before" evidence={before} /><ArrowRight className="mx-auto size-4 text-primary" /><ComparisonImage label="After" evidence={after} /></div><div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/15 px-4 py-3 text-xs"><span><b>{action.completedByName ?? action.responsiblePersonName ?? action.assignedTo}</b> · Responsible</span><span className="font-semibold text-emerald-700 dark:text-emerald-400">₹{(action.costSaving ?? 0).toLocaleString("en-IN")} saved</span></div></button></Card>; }
-function ComparisonImage({ label, evidence }: { label: string; evidence?: MyActionEvidence }) { return <div><p className={`mb-1.5 text-[10px] font-bold uppercase tracking-wider ${label === "Before" ? "text-red-600" : "text-green-600"}`}>{label}</p><div className="aspect-[16/10] overflow-hidden rounded-lg border bg-muted">{evidence?.url ? <img src={evidence.url} alt={evidence.name} className="size-full object-cover" /> : <div className="grid size-full place-items-center"><ImageIcon className="size-5 text-muted-foreground" /></div>}</div></div>; }

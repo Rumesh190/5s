@@ -46,14 +46,18 @@ export default function EditUserDialog({
   );
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setName(user.name);
       setEmail(user.email);
       setRole(user.role);
       setPlant(user.plant);
       setDepartment(user.department);
       setStatus(user.status);
-    }
+    });
+    return () => { cancelled = true; };
   }, [open, user]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -104,7 +108,7 @@ export default function EditUserDialog({
             <DialogTitle>Edit User</DialogTitle>
 
             <DialogDescription>
-              Update the user's profile, role, plant, department,
+              Update the user&apos;s profile, role, plant, department,
               and account status.
             </DialogDescription>
           </DialogHeader>

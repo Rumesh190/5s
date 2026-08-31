@@ -14,6 +14,7 @@ function ThemeToggle() {
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
+    let cancelled = false
     const storedTheme = window.localStorage.getItem(
       STORAGE_KEY
     ) as Theme | null
@@ -31,8 +32,15 @@ function ThemeToggle() {
       initialTheme === "dark"
     )
 
-    setTheme(initialTheme)
-    setMounted(true)
+    queueMicrotask(() => {
+      if (cancelled) return
+      setTheme(initialTheme)
+      setMounted(true)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   function toggleTheme() {

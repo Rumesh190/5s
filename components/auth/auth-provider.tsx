@@ -10,7 +10,22 @@ const AuthContext = React.createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = React.useState(false); const [authReady, setAuthReady] = React.useState(false);
-  React.useEffect(() => { try { const value = JSON.parse(localStorage.getItem(AUTH_KEY) ?? "null") as Partial<DemoAuthSession> | null; setAuthenticated(value?.authenticated === true && value.username === "admin" && value.version === 1); } catch { setAuthenticated(false); } finally { setAuthReady(true); } }, []);
+  React.useEffect(() => {
+    let cancelled = false;
+    let isAuthenticated = false;
+    try {
+      const value = JSON.parse(localStorage.getItem(AUTH_KEY) ?? "null") as Partial<DemoAuthSession> | null;
+      isAuthenticated = value?.authenticated === true && value.username === "admin" && value.version === 1;
+    } catch {
+      isAuthenticated = false;
+    }
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setAuthenticated(isAuthenticated);
+      setAuthReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const login = React.useCallback(async (username: string, password: string) => { await new Promise((resolve) => window.setTimeout(resolve, 280)); if (username !== "admin" || password !== "admin") return false; const result = safeSetStorage(AUTH_KEY, { authenticated: true, username: "admin", version: 1 } satisfies DemoAuthSession); if (!result.success) return false; setAuthenticated(true); return true; }, []);
   const logout = React.useCallback(() => { localStorage.removeItem(AUTH_KEY); setAuthenticated(false); }, []);
   const value = React.useMemo(() => ({ authenticated, authReady, login, logout }), [authenticated, authReady, login, logout]);

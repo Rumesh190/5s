@@ -334,7 +334,6 @@ export default function MyActionsPage() {
     if (!action) return;
     router.replace(`/5s/actions/${encodeURIComponent(action.id)}`);
     // Open a notification target once after actions hydrate.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actions, router]);
 
   /* =========================================================

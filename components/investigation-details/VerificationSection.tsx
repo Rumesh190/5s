@@ -119,13 +119,20 @@ export default function VerificationSection({
     React.useRef<HTMLInputElement | null>(null)
 
   React.useEffect(() => {
-    setComments(
-      verification.comments ?? ""
-    )
+    let cancelled = false
+    queueMicrotask(() => {
+      if (cancelled) return
+      setComments(
+        verification.comments ?? ""
+      )
 
-    setFailureReason(
-      verification.failureReason ?? ""
-    )
+      setFailureReason(
+        verification.failureReason ?? ""
+      )
+    })
+    return () => {
+      cancelled = true
+    }
   }, [
     verification.comments,
     verification.failureReason,

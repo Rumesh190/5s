@@ -95,7 +95,13 @@ function InvestigationTimeline({
    * synchronize the local timeline.
    */
   React.useEffect(() => {
-    setTimeline(initialTimeline)
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) setTimeline(initialTimeline)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [initialTimeline])
 
   function handlePostComment() {
