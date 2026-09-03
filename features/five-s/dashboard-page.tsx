@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 
 import { useMemo, useState } from "react";
@@ -40,6 +41,7 @@ import {
   Image as ImageIcon,
   Plus,
   Printer,
+  RotateCcw,
 } from "lucide-react";
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { canAuditZone } from "@/lib/five-s/configuration";
@@ -250,7 +252,7 @@ export default function FiveSDashboardPage() {
   const [period, setPeriod] = useState<DashboardPeriod>("month");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const zoneFilter = "All";
+  const [zoneFilter, setZoneFilter] = useState("All");
   const [preview, setPreview] = useState<MyActionEvidence | null>(null);
   const [dashboardView, setDashboardView] = useState<DashboardView>("overview");
   const [selectedImprovementId, setSelectedImprovementId] = useState<string | null>(null);
@@ -504,6 +506,7 @@ export default function FiveSDashboardPage() {
           ))}
         </nav>
         <div className="flex min-w-0 flex-wrap items-center gap-1 border-t px-1 pt-1 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0" role="group" aria-label="Dashboard time range">
+          <DashboardFilter value={zoneFilter} onChange={setZoneFilter} label="All zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} />
           {(["week", "month", "year", "custom"] as const).map((value) => (
             <Button key={value} type="button" size="sm" variant={period === value ? "secondary" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="shrink-0 capitalize">
               {value === "week" ? t("common.weekly") : value === "month" ? t("common.monthly") : value === "year" ? t("common.yearly") : t("common.custom")}
@@ -532,7 +535,7 @@ export default function FiveSDashboardPage() {
 
         <div className="grid min-w-0 gap-4 lg:grid-cols-2">
           <AuditScoreTrend data={metrics.auditTrend} change={metrics.trendChange} />
-          <ZonePerformanceChart data={metrics.zonePerformance} />
+          <ZonePerformanceChart data={metrics.zonePerformance} selectedZone={zoneFilter} onSelectZone={setZoneFilter} />
           <CorrectiveActionsChart data={metrics.nonComplianceByZone} />
           <ImprovementsTrend data={metrics.improvementTrend} />
         </div>
@@ -540,7 +543,9 @@ export default function FiveSDashboardPage() {
 
       {dashboardView === "nc-summary" && (
         <NCSummaryTable
-          actions={metrics.filteredActions}
+          key={zoneFilter}
+          actions={actions}
+          dashboardZone={zoneFilter}
           onPreview={setPreview}
           onOpen={(action) => {
             setSelectedImprovementId(action.id);
@@ -565,19 +570,26 @@ export default function FiveSDashboardPage() {
   );
 }
 
-function NCSummaryTable({ actions, onPreview, onOpen, onReport }: { actions: MyAction[]; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
-  const [selectedZone, setSelectedZone] = useState("All");
-  const zones = useMemo(() => ["Zone A", "Zone B", "Zone C", "Zone D"], []);
-  const activeZone = selectedZone === "All" || zones.includes(selectedZone) ? selectedZone : "All";
-  const filteredActions = activeZone === "All" ? actions : actions.filter((action) => action.area === activeZone);
+function NCSummaryTable({ actions, dashboardZone, onPreview, onOpen, onReport }: { actions: MyAction[]; dashboardZone:string; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
+  const zones = useMemo(() => FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name), []);
+  const [selectedZones,setSelectedZones]=useState<string[]>(()=>dashboardZone==="All"?zones:[dashboardZone]);
+  const [fromDate,setFromDate]=useState(""); const [toDate,setToDate]=useState("");
+  const allZonesSelected=selectedZones.length===zones.length;
+  const hasActiveFilters=!allZonesSelected||Boolean(fromDate)||Boolean(toDate);
+  const zoneLabel=allZonesSelected?"All zones":selectedZones.length===0?"No zones selected":selectedZones.length<=2?selectedZones.join(" + "):`${selectedZones.length} zones`;
+  const filteredActions=actions.filter((action)=>selectedZones.includes(action.area)&&(!fromDate||action.createdAt.slice(0,10)>=fromDate)&&(!toDate||action.createdAt.slice(0,10)<=toDate));
+  function toggleZone(zone:string,checked:boolean){setSelectedZones(current=>checked?[...new Set([...current,zone])]:current.filter(item=>item!==zone));}
   return (
     <Card className="min-w-0 overflow-hidden">
       <CardHeader className="grid-cols-1 gap-x-6 gap-y-3 border-b bg-muted/15 pb-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:pb-6">
         <div className="min-w-0"><CardTitle className="text-base">Non-compliance summary</CardTitle><p className="mt-1 text-sm leading-5 text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p></div>
         <CardAction className="col-start-1 row-start-2 w-full justify-self-stretch sm:col-start-2 sm:row-span-1 sm:row-start-1 sm:w-auto sm:justify-self-end">
-          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
-            <DashboardFilter value={activeZone} onChange={setSelectedZone} label="All zones" options={zones} />
-            <Button type="button" size="sm" variant="outline" className="w-full bg-background shadow-none sm:w-auto" onClick={() => exportNonComplianceCsv(filteredActions)}><Download className="size-4" /> Export CSV</Button>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
+            <DropdownMenu><DropdownMenuTrigger render={<Button type="button" size="sm" variant="outline" className="col-span-2 min-w-40 justify-between bg-background shadow-none sm:col-span-1"/>}>{zoneLabel}<span className="text-muted-foreground">▾</span></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-52"><DropdownMenuCheckboxItem checked={allZonesSelected} onCheckedChange={(checked)=>setSelectedZones(checked?[...zones]:[])}>All zones</DropdownMenuCheckboxItem>{zones.map(zone=><DropdownMenuCheckboxItem key={zone} checked={selectedZones.includes(zone)} onCheckedChange={(checked)=>toggleZone(zone,checked)}>{zone}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu>
+            <input aria-label="NC summary from date" type="date" value={fromDate} max={toDate||undefined} onChange={(event)=>setFromDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"/>
+            <input aria-label="NC summary to date" type="date" value={toDate} min={fromDate||undefined} onChange={(event)=>setToDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"/>
+            <Button type="button" size="sm" variant="ghost" className="col-span-2 sm:col-span-1" disabled={!hasActiveFilters} onClick={()=>{setSelectedZones([...zones]);setFromDate("");setToDate("")}}><RotateCcw className="size-4"/>Clear Filters</Button>
+            <Button type="button" size="sm" variant="outline" className="col-span-2 w-full bg-background shadow-none sm:col-span-1 sm:w-auto" disabled={!filteredActions.length} onClick={() => exportNonComplianceCsv(filteredActions)}><Download className="size-4" /> Export {filteredActions.length} CSV</Button>
           </div>
         </CardAction>
       </CardHeader>

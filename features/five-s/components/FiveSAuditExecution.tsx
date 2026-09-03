@@ -95,6 +95,7 @@ import type {
   FiveSQuestionStatus,
   FiveSSection,
 } from "../types/five-s";
+import type { MyAction } from "../types/my-actions";
 
 interface FiveSAuditExecutionProps {
   audit: FiveSAudit;
@@ -396,6 +397,8 @@ function FiveSAuditExecution({
 
   const [showCompleteConfirmation, setShowCompleteConfirmation] =
     useState(false);
+  const [showOpenActionsWarning, setShowOpenActionsWarning] =
+    useState(false);
 
   const [
     activeActionQuestion,
@@ -501,6 +504,17 @@ function FiveSAuditExecution({
 
   const auditReadyForCompletion =
     allQuestions.length > 0 && answeredQuestions === allQuestions.length;
+  const auditActions = allQuestions
+    .map((question) => questionStates[question.id]?.actionId)
+    .filter((actionId): actionId is string => Boolean(actionId))
+    .map((actionId) => getActionById(actionId))
+    .filter((action): action is MyAction => Boolean(action));
+  const openAuditActions = auditActions.filter((action) => action.status !== "Completed");
+  const isFinalQuestion = Boolean(
+    activeSection &&
+    activeSectionIndex === sections.length - 1 &&
+    activeQuestionIndex === activeSection.questions.length - 1
+  );
 
   const auditLifecycleIndex =
     audit.status === "Completed"
@@ -672,14 +686,14 @@ function FiveSAuditExecution({
         window.requestAnimationFrame(() => {
           questionItemRefs.current[targetId]?.scrollIntoView({
             behavior: "smooth",
-            block: "center",
+            block: fullScreen ? "start" : "center",
           });
         });
       });
     }, 210);
 
     return () => window.clearTimeout(timer);
-  }, [activeQuestionIndex, activeSection, activeSectionIndex, allQuestions, questionStates, sections]);
+  }, [activeQuestionIndex, activeSection, activeSectionIndex, allQuestions, fullScreen, questionStates, sections]);
 
   /**
    * ---------------------------------------------------------
@@ -1232,6 +1246,21 @@ function FiveSAuditExecution({
     });
   }
 
+  function scrollQuestionToStart(questionId: string) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const element = questionItemRefs.current[questionId];
+        if (!element) return;
+        const list = questionListRef.current;
+        const outer = questionScrollRef.current;
+        const container = list && list.scrollHeight > list.clientHeight ? list : outer;
+        if (!container) return;
+        const top = container.scrollTop + element.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        container.scrollTo({ top, behavior: "smooth" });
+      });
+    });
+  }
+
   function revealQuestionOnMobile(questionId: string) {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -1279,8 +1308,10 @@ function FiveSAuditExecution({
     setNavigationDirection(direction === 1 ? "forward" : "backward");
     setActiveSectionIndex(sectionIndex);
     setActiveQuestionIndex(questionIndex);
-    setExpandedQuestionId(sections[sectionIndex]?.questions[questionIndex]?.id ?? null);
-    resetQuestionScroll();
+    const targetQuestionId = sections[sectionIndex]?.questions[questionIndex]?.id ?? null;
+    setExpandedQuestionId(targetQuestionId);
+    if (fullScreen && targetQuestionId) scrollQuestionToStart(targetQuestionId);
+    else resetQuestionScroll();
   }
 
   /**
@@ -1428,6 +1459,14 @@ function FiveSAuditExecution({
     router.push("/5s/audits");
   }
 
+  function requestAuditCompletion() {
+    if (openAuditActions.length > 0) {
+      setShowOpenActionsWarning(true);
+      return;
+    }
+    setShowCompleteConfirmation(true);
+  }
+
   function handleSignatureConfirm(signatureImage: string) {
     const signature = { userId: currentUser.id, userName: audit.auditor, signedAt: new Date().toISOString(), signatureImage };
     setAuditorSignature(signature);
@@ -1491,7 +1530,7 @@ function FiveSAuditExecution({
               <Button
                 type="button"
                 className="print:hidden"
-                onClick={() => setShowCompleteConfirmation(true)}
+                onClick={requestAuditCompletion}
               >
                 <CheckCircle2 className="mr-2 size-4" />
                 {t("audit.complete")}
@@ -1769,6 +1808,7 @@ function FiveSAuditExecution({
           onSignatureClear={handleSignatureClear}
           onConfirm={handleCompleteAudit}
         />
+        <OpenAuditActionsDialog open={showOpenActionsWarning} actions={openAuditActions} onOpenChange={setShowOpenActionsWarning} onOpenAction={(actionId) => router.push(`/5s/actions/${encodeURIComponent(actionId)}`)} />
       </div>
     );
   }
@@ -1783,7 +1823,7 @@ function FiveSAuditExecution({
     <div className={fullScreen ? "fixed inset-0 z-[60] flex h-[100dvh] w-screen min-w-0 flex-col overflow-hidden bg-background motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-[0.99] motion-safe:duration-200" : "flex w-full min-w-0 max-w-full flex-col md:h-[calc(100dvh-7rem)] md:min-h-0"}>
       {/* FIXED HEADER */}
 
-      <div className={`w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8 ${fullScreen ? "sticky top-0 z-40" : ""}`}>
+      {!fullScreen && <div className="w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8">
         <FiveSPageHeader
           eyebrow=""
           title={`5S Audit · ${audit.title}`}
@@ -1806,7 +1846,7 @@ function FiveSAuditExecution({
                   <FileBarChart className="mr-2 size-4" />
                   {t("audit.generateReport")}
                 </Button>
-                <Button type="button" onClick={() => setShowCompleteConfirmation(true)}>
+                <Button type="button" onClick={requestAuditCompletion}>
                   <CheckCircle2 className="mr-2 size-4" />
                   {t("audit.complete")}
                 </Button>
@@ -1830,15 +1870,15 @@ function FiveSAuditExecution({
           }
         />
 
-      </div>
+      </div>}
 
       {/* AUDIT SECTION RAIL + QUESTION WORKSPACE */}
 
       <div
         ref={questionScrollRef}
-        className={`w-full min-w-0 max-w-full flex-1 touch-pan-y px-0 py-4 [-webkit-overflow-scrolling:touch] md:min-h-0 md:px-6 lg:px-8 ${fullScreen ? "min-h-0 overflow-y-auto overscroll-contain" : "overflow-visible md:overflow-y-auto lg:overflow-hidden"}`}
+        className={`w-full min-w-0 max-w-full flex-1 touch-pan-y px-0 [-webkit-overflow-scrolling:touch] md:min-h-0 md:px-6 lg:px-8 ${fullScreen ? "min-h-0 overflow-y-auto overscroll-contain py-2 md:py-3" : "overflow-visible py-4 md:overflow-y-auto lg:overflow-hidden"}`}
       >
-        <div className={`mx-auto grid w-full min-w-0 gap-4 lg:h-full lg:min-h-0 ${fullScreen ? "max-w-[1280px]" : "max-w-[1600px] lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]"}`}>
+        <div className={`mx-auto grid w-full min-w-0 gap-4 lg:h-full lg:min-h-0 ${fullScreen ? "max-w-[1600px]" : "max-w-[1600px] lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]"}`}>
           <aside className={fullScreen ? "hidden" : "hidden min-w-0 lg:block lg:h-full lg:min-h-0"}>
             <div className="flex h-full min-w-0 flex-col rounded-xl border border-border/75 bg-card p-3 shadow-sm">
               <div className="border-b border-border/60 px-2 pb-3">
@@ -2459,7 +2499,14 @@ function FiveSAuditExecution({
         <footer className="mobile-safe-bottom sticky bottom-0 z-40 flex shrink-0 items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 shadow-[0_-10px_30px_-24px_rgb(15_23_42/0.5)] backdrop-blur md:px-8">
           <Button type="button" variant="outline" disabled={activeSectionIndex === 0 && activeQuestionIndex === 0} onClick={() => navigateQuestion(-1)}>Previous</Button>
           <p className="hidden text-xs text-muted-foreground sm:block">{auditSectionName(language, activeSection.category)} · Question {activeQuestionIndex + 1} of {activeSection.questions.length}</p>
-          <Button type="button" disabled={!isQuestionComplete(activeSection.questions[activeQuestionIndex]) || (activeSectionIndex === sections.length - 1 && activeQuestionIndex === activeSection.questions.length - 1)} onClick={() => navigateQuestion(1)}>Save &amp; Next <span aria-hidden="true">→</span></Button>
+          {isFinalQuestion ? (
+            <Button type="button" disabled={!auditReadyForCompletion || !isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={requestAuditCompletion}>
+              <CheckCircle2 className="size-4" />
+              Complete Audit
+            </Button>
+          ) : (
+            <Button type="button" disabled={!isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={() => navigateQuestion(1)}>Save &amp; Next <span aria-hidden="true">→</span></Button>
+          )}
         </footer>
       )}
 
@@ -2652,9 +2699,14 @@ function FiveSAuditExecution({
         onSignatureClear={handleSignatureClear}
         onConfirm={handleCompleteAudit}
       />
+      <OpenAuditActionsDialog open={showOpenActionsWarning} actions={openAuditActions} onOpenChange={setShowOpenActionsWarning} onOpenAction={(actionId) => router.push(`/5s/actions/${encodeURIComponent(actionId)}`)} />
 
     </div>
   );
+}
+
+function OpenAuditActionsDialog({open,actions,onOpenChange,onOpenAction}:{open:boolean;actions:MyAction[];onOpenChange:(open:boolean)=>void;onOpenAction:(actionId:string)=>void}) {
+  return <AlertDialog open={open} onOpenChange={onOpenChange}><AlertDialogContent className="max-h-[calc(100dvh-1.5rem)] sm:max-w-xl"><AlertDialogHeader><AlertDialogTitle>Open actions must be completed</AlertDialogTitle><AlertDialogDescription>This audit cannot be completed while corrective actions from this audit are still open. Review and complete the actions below, then return to complete the audit.</AlertDialogDescription></AlertDialogHeader><div className="grid max-h-[50dvh] gap-2 overflow-y-auto pr-1">{actions.map(action=><div key={action.id} className="flex min-w-0 flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{action.id}</span><Badge size="sm" variant={action.status==="Overdue"||action.status==="Rework Required"?"danger":action.status==="In Progress"||action.status==="Pending Review"||action.status==="Pending Auditor Review"||action.status==="Awaiting Review"?"warning":"info"}>{action.status}</Badge></div><p className="mt-1 truncate text-sm font-semibold" title={action.title}>{action.title}</p><p className="mt-1 text-xs text-muted-foreground">{action.sectionId??action.category??"Audit finding"} · Responsible: {action.responsiblePersonName||action.assignedTo||action.zoneLeaderName||"Unassigned"}</p></div><Button type="button" size="sm" variant="outline" className="shrink-0" onClick={()=>onOpenAction(action.id)}><Eye className="size-4"/>Open Action</Button></div>)}</div><AlertDialogFooter><AlertDialogCancel>Return to Audit</AlertDialogCancel></AlertDialogFooter></AlertDialogContent></AlertDialog>
 }
 
 function CompleteAuditDialog({

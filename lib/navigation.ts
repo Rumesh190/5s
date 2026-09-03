@@ -8,12 +8,15 @@ import {
   ListTodo,
   Flag,
   TrendingUp,
+  ShieldCheck,
 } from "lucide-react";
+import type { PermissionCode } from "@/features/five-s/administration/types";
 
 export interface NavLeaf {
   label: string;
   href: string;
   icon: LucideIcon;
+  requiredPermission?: PermissionCode;
 }
 
 export interface NavGroup extends NavLeaf {
@@ -77,6 +80,12 @@ export const MAIN_NAV: NavEntry[] = [
         href: "/5s/red",
         icon: Flag,
       },
+      {
+        label: "Administration",
+        href: "/administration/users",
+        icon: ShieldCheck,
+        requiredPermission: "administration.view",
+      },
     ],
   },
 ];
@@ -96,6 +105,7 @@ export const ROUTE_LABELS: Record<
   "/5s/reports": "Reports",
   "/5s/continuous-improvement": "Continuous Improvement",
   "/5s/red": "Red Tag",
+  "/administration/users": "Users & Access",
 
   /*
    * Keep Profile temporarily because the shared

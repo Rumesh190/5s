@@ -14,6 +14,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/components/preferences/use-i18n"
 import { navigationKey } from "@/lib/i18n"
+import { useCurrentUser } from "@/lib/current-user"
+import { useAdminUsers } from "@/features/five-s/administration/store"
+import { hasPermission } from "@/features/five-s/administration/permissions"
 
 const HIDE_DISTANCE = 36
 const SHOW_DISTANCE = 18
@@ -28,9 +31,12 @@ function ProductNav() {
   const ticking = React.useRef(false)
   const [hidden, setHidden] = React.useState(false)
   const { t } = useI18n()
+  const currentUser = useCurrentUser()
+  const adminUsers = useAdminUsers()
 
   const navGroup = MAIN_NAV.find(isNavGroup)
-  const items = navGroup?.children ?? []
+  const adminUser = adminUsers.find((user) => user.id === currentUser.id)
+  const items = (navGroup?.children ?? []).filter((item)=>!item.requiredPermission||hasPermission(adminUser,item.requiredPermission))
   const primaryItems = items.slice(0, 4)
   const secondaryItems = items.slice(4)
 
@@ -101,14 +107,14 @@ function ProductNav() {
       ref={navRef}
       className={cn(
         "app-top-nav fixed inset-x-0 top-0 z-50 hidden h-16 border-b border-slate-200/90 bg-white text-slate-900",
-        "shadow-[0_2px_10px_rgb(15_23_42/0.05)] dark:border-white/[0.08] dark:bg-[#20242c] dark:text-slate-100 dark:shadow-[0_2px_12px_rgb(0_0_0/0.22)]",
+        "shadow-[0_2px_10px_rgb(15_23_42/0.05)] dark:border-white/[0.065] dark:bg-[#171a20]/95 dark:text-slate-100 dark:shadow-[0_8px_28px_-18px_rgb(0_0_0/0.9)] dark:backdrop-blur-xl",
         "transition-transform duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none lg:block",
         hidden && "-translate-y-full"
       )}
     >
       <div className="relative mx-auto flex h-full w-full max-w-[1920px] items-center px-6 xl:px-8">
         <Link href="/5s" className="flex shrink-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-accent)]/60">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--brand-accent)] text-[var(--brand-accent-foreground)] shadow-[0_3px_10px_var(--brand-accent-shadow)]">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--brand-accent)] text-[var(--brand-accent-foreground)] shadow-[0_3px_10px_var(--brand-accent-shadow)] dark:ring-1 dark:ring-white/15 dark:shadow-[0_5px_18px_var(--brand-accent-shadow)]">
             <ClipboardCheck className="size-[18px]" />
           </span>
           <span className="font-heading text-[15px] font-semibold tracking-[-0.01em] text-slate-950 dark:text-white">5S</span>
@@ -133,14 +139,14 @@ function ProductNav() {
                 className={cn(
                   "group relative h-9 items-center gap-2 rounded-md px-2.5 text-[13.5px] font-medium xl:px-3",
                   primaryItems.includes(item) ? "flex" : "hidden xl:flex",
-                  "text-slate-600 transition-[background-color,color] duration-200 hover:bg-slate-100/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-100",
+                  "text-slate-600 transition-[background-color,color,box-shadow] duration-200 hover:bg-slate-100/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/[0.055] dark:hover:text-slate-100",
                   "outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-accent)]/60",
-                  active && "bg-[var(--brand-nav-soft)] text-[var(--brand-accent)] dark:text-[var(--brand-accent-light)]"
+                  active && "bg-[var(--brand-nav-soft)] text-[var(--brand-accent)] dark:bg-[var(--brand-nav-soft)] dark:text-[var(--brand-accent-light)] dark:ring-1 dark:ring-white/[0.055] dark:shadow-[0_8px_20px_-14px_var(--brand-accent-shadow)]"
                 )}
               >
                 <Icon className={cn("size-4", active ? "text-[var(--brand-accent)] dark:text-[var(--brand-accent-light)]" : "text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300")} />
-                <span className="whitespace-nowrap">{t(navigationKey(item.href))}</span>
-                {active && <span className="absolute inset-x-3 -bottom-[14px] h-0.5 rounded-full bg-[var(--brand-accent)] dark:bg-[var(--brand-accent-light)]" />}
+                <span className="whitespace-nowrap">{item.label === "Administration" ? item.label : t(navigationKey(item.href))}</span>
+                {active && <span className="absolute inset-x-3 -bottom-[14px] h-0.5 rounded-full bg-[var(--brand-accent)] shadow-[0_0_8px_var(--brand-accent-shadow)] dark:bg-[var(--brand-accent-light)]" />}
               </Link>
             )
           })}
@@ -149,12 +155,12 @@ function ProductNav() {
               <MoreHorizontal className="size-4" /> {t("navigation.more")}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="w-56">
-              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="break-words">{t(navigationKey(item.href))}</span></DropdownMenuItem> })}
+              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="break-words">{item.label === "Administration" ? item.label : t(navigationKey(item.href))}</span></DropdownMenuItem> })}
             </DropdownMenuContent>
           </DropdownMenu>}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1.5 [&_button]:text-slate-600 [&_button]:hover:bg-slate-100 [&_button]:hover:text-slate-950 dark:[&_button]:text-slate-400 dark:[&_button]:hover:bg-white/[0.07] dark:[&_button]:hover:text-white [&_[data-slot=avatar-fallback]]:bg-slate-100 [&_[data-slot=avatar-fallback]]:text-slate-700 dark:[&_[data-slot=avatar-fallback]]:bg-white/[0.08] dark:[&_[data-slot=avatar-fallback]]:text-slate-200">
+        <div className="ml-auto flex items-center gap-1.5 [&_button]:text-slate-600 [&_button]:hover:bg-slate-100 [&_button]:hover:text-slate-950 dark:[&_button]:text-slate-400 dark:[&_button]:ring-1 dark:[&_button]:ring-transparent dark:[&_button]:hover:bg-white/[0.065] dark:[&_button]:hover:text-white dark:[&_button]:hover:ring-white/[0.06] [&_[data-slot=avatar-fallback]]:bg-slate-100 [&_[data-slot=avatar-fallback]]:text-slate-700 dark:[&_[data-slot=avatar]]:ring-1 dark:[&_[data-slot=avatar]]:ring-white/10 dark:[&_[data-slot=avatar-fallback]]:bg-white/[0.075] dark:[&_[data-slot=avatar-fallback]]:text-slate-100">
           <ThemeToggle />
           <NotificationBell />
           <UserMenu />

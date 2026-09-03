@@ -34,6 +34,7 @@ function emit() {
 function subscribe(l: () => void) { load(); listeners.add(l); return () => listeners.delete(l); }
 function snapshot() { load(); return records; }
 export function useImprovements() { return useSyncExternalStore(subscribe, snapshot, () => SERVER_RECORDS); }
+export function getImprovementById(id: string) { load(); return records.find((item) => item.id === id); }
 export function isZoneMember(user: DemoUser) { return Boolean(getFiveSZoneConfiguration(user.primaryZone)?.members.some((m) => m.id === user.id)); }
 export function canSeeImprovement(item: ContinuousImprovement, user: DemoUser) { return item.zoneLeaderId === user.id || item.proposedById === user.id || item.memberIds.includes(user.id); }
 function event(type: ContinuousImprovement["timeline"][number]["type"], user: DemoUser, remark?: string) { return { id: `CIH-${crypto.randomUUID()}`, type, actorId: user.id, actorName: user.name, at: new Date().toISOString(), remark }; }

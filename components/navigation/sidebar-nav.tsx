@@ -8,6 +8,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { isNavGroup, isNavItemActive, MAIN_NAV, type NavLeaf } from "@/lib/navigation"
 import { useI18n } from "@/components/preferences/use-i18n"
 import { navigationKey } from "@/lib/i18n"
+import { useCurrentUser } from "@/lib/current-user"
+import { useAdminUsers } from "@/features/five-s/administration/store"
+import { hasPermission } from "@/features/five-s/administration/permissions"
 
 interface SidebarNavProps {
   collapsed?: boolean
@@ -17,12 +20,15 @@ interface SidebarNavProps {
 function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
   const pathname = usePathname()
   const navGroup = MAIN_NAV.find(isNavGroup)
+  const currentUser = useCurrentUser()
+  const adminUsers = useAdminUsers()
+  const adminUser = adminUsers.find((user)=>user.id===currentUser.id)
 
   if (!navGroup) return null
 
   return (
     <nav aria-label="Primary" className={cn("flex flex-col gap-1", collapsed ? "px-2" : "px-3")}>
-      {navGroup.children.map((item) => (
+      {navGroup.children.filter((item)=>!item.requiredPermission||hasPermission(adminUser,item.requiredPermission)).map((item) => (
         <SidebarLink
           key={item.href}
           entry={item}
@@ -38,7 +44,7 @@ function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
 function SidebarLink({ entry, active, collapsed, onNavigate }: { entry: NavLeaf; active: boolean; collapsed: boolean; onNavigate?: () => void }) {
   const Icon = entry.icon
   const { t } = useI18n()
-  const label = t(navigationKey(entry.href))
+  const label = entry.label === "Administration" ? entry.label : t(navigationKey(entry.href))
   const link = (
     <Link
       href={entry.href}
