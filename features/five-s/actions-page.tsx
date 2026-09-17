@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatCard } from "@/components/ui/stat-card";
 import FiveSPageHeader from "@/features/five-s/components/FiveSPageHeader";
 import type { MyAction, MyActionPriority, MyActionStatus } from "@/features/five-s/types/my-actions";
@@ -17,11 +18,11 @@ import { useCurrentUser } from "@/lib/current-user";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
 import { ACTION_LIFECYCLE_STAGES, getActionLifecycleStage, type ActionLifecycleStage } from "@/lib/five-s/lifecycle-status";
 
-const STATUS_CONFIG: Record<MyActionStatus, { label: string; variant: "success" | "warning" | "danger" | "info" }> = {
-  "Awaiting Assignment": { label: "Awaiting Assignment", variant: "warning" },
+const STATUS_CONFIG: Record<MyActionStatus, { label: string; variant: "success" | "warning" | "danger" | "info" | "muted" }> = {
+  "Awaiting Assignment": { label: "Awaiting Assignment", variant: "muted" },
   Open: { label: "Open", variant: "info" },
   Assigned: { label: "Assigned", variant: "info" },
-  "In Progress": { label: "In Progress", variant: "warning" },
+  "In Progress": { label: "In Progress", variant: "info" },
   Overdue: { label: "Overdue", variant: "danger" },
   "Awaiting Review": { label: "Awaiting Review", variant: "info" },
   "Rework Required": { label: "Rework Required", variant: "danger" },
@@ -41,6 +42,7 @@ export default function MyActionsPage() {
   const actions = useActionStore();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | ActionLifecycleStage>("All");
+  const [exactStatus, setExactStatus] = useState<"All" | MyActionStatus>("All");
 
   const roleActions = useMemo(() => actions.filter((action) => {
     const zoneLeaderId = action.zoneLeaderId ?? getFiveSZoneConfiguration(action.area)?.leaderId;
@@ -54,10 +56,11 @@ export default function MyActionsPage() {
     const query = search.trim().toLowerCase();
     return roleActions.filter((action) => {
       const matchesStatus = statusFilter === "All" || getActionLifecycleStage(action.status) === statusFilter;
+      const matchesExactStatus = exactStatus === "All" || action.status === exactStatus;
       const searchableValues = [action.title, action.description, action.sourceTitle, action.plant, action.department, action.area, action.priority];
-      return matchesStatus && (!query || searchableValues.some((value) => value.toLowerCase().includes(query)));
+      return matchesStatus && matchesExactStatus && (!query || searchableValues.some((value) => value.toLowerCase().includes(query)));
     });
-  }, [roleActions, search, statusFilter]);
+  }, [exactStatus, roleActions, search, statusFilter]);
 
   useEffect(() => {
     const actionId = new URLSearchParams(window.location.search).get("actionId");
@@ -82,9 +85,17 @@ export default function MyActionsPage() {
     router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`);
   }
 
+  function clearFilters() {
+    setSearch("");
+    setStatusFilter("All");
+    setExactStatus("All");
+  }
+
   return (
     <PageContainer>
       <FiveSPageHeader eyebrow="5S Workspace" title="Actions" description="Manage assigned corrective actions and track them through verification and closure." />
+
+      <p className="text-sm text-muted-foreground">Showing actions where you are the Auditor, Zone Leader, or responsible Zone Member.</p>
 
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <StatCard label="Total Actions" value={counts.total} description="Assigned to you" icon={ClipboardCheck} />
@@ -107,10 +118,13 @@ export default function MyActionsPage() {
               <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search actions..." className="pl-9 sm:w-64" />
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center">
+          <div className="-mx-1 flex flex-1 gap-2 overflow-x-auto px-1 pb-1 pt-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
             {(["All", ...ACTION_LIFECYCLE_STAGES] as const).map((status) => (
-              <Button key={status} type="button" size="sm" variant={statusFilter === status ? "default" : "outline"} onClick={() => setStatusFilter(status)}>{status}</Button>
+              <Button key={status} type="button" size="sm" className="min-h-11 shrink-0 md:min-h-8" variant={statusFilter === status ? "default" : "outline"} onClick={() => setStatusFilter(status)}>{status}</Button>
             ))}
+          </div>
+          <Select value={exactStatus} onValueChange={(value)=>setExactStatus((value??"All") as "All"|MyActionStatus)}><SelectTrigger className="h-11 w-full md:h-9 md:w-52" aria-label="Refine by exact action status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">All exact statuses</SelectItem>{Object.keys(STATUS_CONFIG).map((status)=><SelectItem key={status} value={status}>{STATUS_CONFIG[status as MyActionStatus].label}</SelectItem>)}</SelectContent></Select>
           </div>
         </CardHeader>
 
@@ -120,6 +134,7 @@ export default function MyActionsPage() {
               <CheckCircle2 className="size-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium">No actions found</p>
               <p className="mt-1 text-xs text-muted-foreground">Try changing your search or filter.</p>
+              {(search.trim() || statusFilter !== "All" || exactStatus !== "All") && <Button type="button" variant="outline" className="mt-4 min-h-11 md:min-h-9" onClick={clearFilters}>Clear Search &amp; Filters</Button>}
             </div>
           ) : (
             <div className="space-y-3">
@@ -149,8 +164,8 @@ export default function MyActionsPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
                         {action.evidence.length > 0 && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Paperclip className="size-3.5" />{action.evidence.length}</span>}
-                        <Button size="sm" variant="outline" onClick={() => openAction(action)}><Eye className="size-3.5" />View</Button>
-                        {action.status === "Completed" && <Button size="sm" variant="outline" title="View improvement report" onClick={() => openReport(action)}><FileText className="size-3.5" />Report</Button>}
+                        <Button size="sm" className="min-h-11 md:min-h-8" variant="outline" onClick={() => openAction(action)}><Eye className="size-3.5" />View</Button>
+                        {action.status === "Completed" && <Button size="sm" className="min-h-11 md:min-h-8" variant="outline" title="View improvement report" onClick={() => openReport(action)}><FileText className="size-3.5" />Report</Button>}
                       </div>
                     </div>
                   </article>

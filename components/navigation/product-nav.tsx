@@ -37,8 +37,8 @@ function ProductNav() {
   const navGroup = MAIN_NAV.find(isNavGroup)
   const adminUser = adminUsers.find((user) => user.id === currentUser.id)
   const items = (navGroup?.children ?? []).filter((item)=>!item.requiredPermission||hasPermission(adminUser,item.requiredPermission))
-  const primaryItems = items.slice(0, 4)
-  const secondaryItems = items.slice(4)
+  const operationalItems = items.filter((item) => item.href.startsWith("/5s"))
+  const secondaryItems = items.filter((item) => !item.href.startsWith("/5s"))
 
   React.useEffect(() => {
     lastScrollY.current = window.scrollY
@@ -136,16 +136,19 @@ function ProductNav() {
                   }
                 }}
                 aria-current={active ? "page" : undefined}
+                aria-label={operationalItems.indexOf(item) >= 4 ? (item.requiredPermission ? item.label : t(navigationKey(item.href))) : undefined}
+                title={operationalItems.indexOf(item) >= 4 ? (item.requiredPermission ? item.label : t(navigationKey(item.href))) : undefined}
                 className={cn(
                   "group relative h-9 items-center gap-2 rounded-md px-2.5 text-[13.5px] font-medium xl:px-3",
-                  primaryItems.includes(item) ? "flex" : "hidden xl:flex",
+                  operationalItems.includes(item) ? "flex" : "hidden",
+                  operationalItems.indexOf(item) >= 4 && "px-2 xl:px-3",
                   "text-slate-600 transition-[background-color,color,box-shadow] duration-200 hover:bg-slate-100/80 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-white/[0.055] dark:hover:text-slate-100",
                   "outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-accent)]/60",
                   active && "bg-[var(--brand-nav-soft)] text-[var(--brand-accent)] dark:bg-[var(--brand-nav-soft)] dark:text-[var(--brand-accent-light)] dark:ring-1 dark:ring-white/[0.055] dark:shadow-[0_8px_20px_-14px_var(--brand-accent-shadow)]"
                 )}
               >
                 <Icon className={cn("size-4", active ? "text-[var(--brand-accent)] dark:text-[var(--brand-accent-light)]" : "text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300")} />
-                <span className="whitespace-nowrap">{item.requiredPermission ? item.label : t(navigationKey(item.href))}</span>
+                <span className={cn("whitespace-nowrap", operationalItems.indexOf(item) >= 4 && "hidden 2xl:inline")}>{item.requiredPermission ? item.label : t(navigationKey(item.href))}</span>
                 {active && <span className="absolute inset-x-3 -bottom-[14px] h-0.5 rounded-full bg-[var(--brand-accent)] shadow-[0_0_8px_var(--brand-accent-shadow)] dark:bg-[var(--brand-accent-light)]" />}
               </Link>
             )

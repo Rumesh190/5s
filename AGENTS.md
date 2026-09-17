@@ -51,7 +51,7 @@ Run targeted tests during development, then full checks before handoff.
 - `/5s/continuous-improvement` plus `/new`, `/[improvementId]`, and `/report`.
 - `/5s/reports` — report library and sharing.
 - `/administration/users` — local demo administration.
-- `/settings/audit-configuration/questions` — Admin-only 5S question configuration.
+- `/5s/audits/configuration` — Admin-only 5S question configuration; the old Settings URL redirects here.
 - `/profile` — placeholder profile screen.
 
 ## 6. Architecture
@@ -123,6 +123,7 @@ Use stable IDs where available; names are display values and legacy fallbacks.
 - The default template has 39 questions (7 Sort, 9 Set in Order, 8 Shine, 7 Standardize, 8 Sustain).
 - 5S sections are system-defined and immutable. Only Admin can manage questions inside those sections.
 - Admin may add, edit, deactivate/delete and reorder questions.
+- 5S Question Configuration belongs to the Audit module. Admin accesses it from the Audit header through the Audit Configuration action beside Refresh; it is not a general Settings feature.
 - Audit creation snapshots the active question configuration so later configuration changes never alter historical audits.
 - One garment-industry GOOD PRACTICE reference image per question.
 - Audit Completion Date uses legacy-compatible `dueDate` and defaults to local creation date.
@@ -162,7 +163,7 @@ Use stable IDs where available; names are display values and legacy fallbacks.
 
 - Shared header: `features/five-s/components/ReportHeader.tsx`.
 - IQ logo stays top-left on Audit, Action, CI, Red Tag, and printable Before/After reports.
-- Print/Save PDF uses browser printing; Share uses Web Share plus clipboard fallback.
+- Report sharing sends the generated PDF `File` through native Web Share where file sharing is supported. Unsupported environments download the same PDF; browser-local URLs are never presented as shareable report links.
 - NC Summary is CSV-only; do not force image branding into CSV.
 - Reports render live client data, not immutable snapshots.
 

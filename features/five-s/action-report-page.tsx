@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/preferences/use-i18n";
 import type { MyAction, MyActionActivity, MyActionEvidence } from "./types/my-actions";
 import SharedReportHeader from "./components/ReportHeader";
+import ReportPdfActions from "./components/ReportPdfActions";
 
 interface Props { action: MyAction; onBack: () => void; backLabel?: string }
 
@@ -40,7 +41,7 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
 
   const timeline = [
     { label: "Assigned", icon: UserRound, tone: "blue", event: assigned, fallbackDate: action.createdAt, fallbackActor: action.createdByName ?? action.auditor },
-    { label: "Work Started", icon: Play, tone: "sky", event: started },
+    { label: "Work Started", icon: Play, tone: "sky", event: started, fallbackDate: undefined, fallbackActor: undefined },
     { label: "Submitted for Review", icon: Send, tone: "amber", event: submitted, fallbackDate: action.submittedForReviewAt, fallbackActor: responsible },
     { label: "Reviewed by Zone Leader", icon: ClipboardCheck, tone: "violet", event: reviewed, fallbackDate: action.reviewedAt, fallbackActor: approver },
     { label: "Approved & Closed", icon: Check, tone: "green", event: closed, fallbackDate: action.closedAt ?? action.completedAt, fallbackActor: action.closedBy ?? approver },
@@ -62,10 +63,24 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
       <style>{`@media print { @page { size: A4 landscape; margin: 8mm; } }`}</style>
       <div className="action-report-controls mx-auto mb-4 flex max-w-[1180px] flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" onClick={onBack}><ArrowLeft className="size-4" /> {backLabel}</Button>
-        <Button onClick={handlePrint}><Printer className="size-4" /> {t("reports.savePdf")}</Button>
+        <div className="grid w-full grid-cols-3 gap-2 md:flex md:w-auto md:flex-wrap md:justify-end"><Button className="min-h-11 md:min-h-9" onClick={handlePrint}><Printer className="size-4" /> Print</Button><ReportPdfActions selector=".completed-action-report" filename={`IQ-Corrective-Action-${action.id}.pdf`} title={`IQ Corrective Action Report - ${action.id}`} /></div>
       </div>
 
-      <article className="completed-action-report action-report-document mx-auto max-w-[1180px] overflow-hidden rounded-xl border border-blue-200 bg-white shadow-[0_18px_55px_-42px_rgba(30,64,175,0.45)] dark:border-slate-700 dark:bg-slate-900">
+      <article className="mx-auto overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 md:hidden">
+        <ReportHeader action={action} generatedAt={generatedAt} />
+        <div className="grid gap-4 p-4">
+          <MobileActionDetails items={[["Status", action.status], ["Priority", action.priority], ["Plant", action.plant], ["Zone", action.area], ["Responsible", responsible], ["Due Date", formatDate(action.dueDate)]]} />
+          <MobileReportSection title="Finding / Non-conformance"><p>{beforeText}</p></MobileReportSection>
+          <MobileReportSection title="Proposed Action"><p>{action.proposedAction ?? action.description}</p></MobileReportSection>
+          <MobileReportSection title="Final Action Plan"><p>{action.actionPlan ?? action.proposedAction ?? action.description}</p></MobileReportSection>
+          <MobileReportSection title="Before"><EvidencePanel tone="before" label={t("actionReport.before")} evidence={action.issueEvidence ?? []} description={beforeText} empty="No original evidence captured" /></MobileReportSection>
+          <MobileReportSection title="After"><EvidencePanel tone="after" label={t("actionReport.after")} evidence={action.evidence} description={afterText} empty="No completion evidence captured" /></MobileReportSection>
+          <MobileReportSection title="Completion"><p>{result}</p><MobileActionDetails items={[["Responsible Member", responsible], ["Completed On", formatDateTime(completedAt)], ["Zone Leader reviewer", approver], ["Review Date", formatDateTime(action.reviewedAt)], ["Closure Date", formatDateTime(action.closedAt ?? action.completedAt)]]} /></MobileReportSection>
+          <MobileReportSection title={t("actionReport.timeline")}><ol className="grid gap-3">{timeline.map((stage) => <li key={stage.label} className="border-l-2 border-blue-500 pl-3"><p className="font-semibold">{stage.label}</p><p className="mt-1 text-xs text-muted-foreground">{formatDateTime(stage.event?.createdAt ?? stage.fallbackDate)} · {stage.event?.actorName ?? stage.fallbackActor ?? "—"}</p></li>)}</ol></MobileReportSection>
+        </div>
+      </article>
+
+      <article className="completed-action-report action-report-document mx-auto hidden max-w-[1180px] overflow-hidden rounded-xl border border-blue-200 bg-white shadow-[0_18px_55px_-42px_rgba(30,64,175,0.45)] dark:border-slate-700 dark:bg-slate-900 md:block print:block">
         <ReportHeader action={action} generatedAt={generatedAt} />
 
         <div className="space-y-3 p-4 sm:p-5">
@@ -124,6 +139,14 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
       </article>
     </div>
   );
+}
+
+function MobileReportSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="rounded-lg border border-blue-100 p-4"><h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-blue-700">{title}</h2><div className="text-sm leading-6 text-slate-700 dark:text-slate-200">{children}</div></section>;
+}
+
+function MobileActionDetails({ items }: { items: Array<[string, string | undefined]> }) {
+  return <dl className="grid grid-cols-2 gap-3 rounded-lg border border-blue-100 p-4">{items.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-0.5 break-words text-sm font-semibold">{value || "—"}</dd></div>)}</dl>;
 }
 
 function ReportHeader({ action, generatedAt }: { action: MyAction; generatedAt: string }) {

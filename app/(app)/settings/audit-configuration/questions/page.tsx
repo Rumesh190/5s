@@ -1,5 +1,5 @@
-import FiveSQuestionsPage from "@/features/five-s/question-configuration/questions-page";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <FiveSQuestionsPage />;
+  redirect("/5s/audits/configuration");
 }

@@ -171,9 +171,14 @@ describe("final auditor verification", () => {
 
   it("keeps one completion action in a fixed modal footer while only the body scrolls", () => {
     const verification = readFileSync(resolve("features/five-s/components/FinalAuditVerificationDialog.tsx"), "utf8");
-    expect(verification).toContain("flex max-h-[calc(100dvh-1.5rem)] flex-col");
+    expect(verification).toContain("flex max-h-[calc(100dvh-24px)]");
+    expect(verification).toContain("lg:!max-w-[1120px]");
     expect(verification).toContain("min-h-0 flex-1 overflow-y-auto");
-    expect(verification).toContain('className="z-10 shrink-0 border-t bg-popover');
+    expect(verification).toContain('className="mobile-safe-bottom z-10 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-background');
+    expect(verification).toContain("lg:grid-cols-2");
+    expect(verification).toContain("aspect-[4/3]");
+    expect(verification).toContain("All required questions are ready for final submission.");
+    expect(verification).not.toContain("All 39 questions");
     expect(verification.match(/Complete Audit/g)).toHaveLength(2); // Dialog title and the single canonical CTA.
   });
 });

@@ -8,16 +8,12 @@ import { Button } from "@/components/ui/button";
 import { useActionStore } from "@/lib/actions/action-store";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
 import { useFiveSAuditStore } from "@/lib/five-s/audit-store";
+import { AUDIT_SCORE_LABELS, getAuditScoreLabel } from "@/lib/five-s/audit-score";
 import { useI18n } from "@/components/preferences/use-i18n";
 import type { FiveSEvidence, FiveSQuestion } from "../types/five-s";
 import type { MyAction } from "../types/my-actions";
 import ReportHeader from "./ReportHeader";
-
-const SCORE_LABELS: Record<number, string> = {
-  0: "Non Compliance",
-  1: "Partially Compliance",
-  2: "Fully Compliance",
-};
+import ReportPdfActions from "./ReportPdfActions";
 
 const SCORE_STYLES: Record<number, string> = {
   0: "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300",
@@ -136,12 +132,20 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
         <Button variant="ghost" onClick={() => router.push(backDestination)}>
           <ArrowLeft className="size-4" /> {backLabel}
         </Button>
-        <Button onClick={handlePrint}>
-          <Printer className="size-4" /> {t("reports.savePdf")}
-        </Button>
+        <div className="grid w-full grid-cols-3 gap-2 md:flex md:w-auto md:flex-wrap md:justify-end"><Button className="min-h-11 md:min-h-9" onClick={handlePrint}><Printer className="size-4" /> Print</Button><ReportPdfActions selector=".audit-report-document" filename={`IQ-Audit-${audit.id}.pdf`} title={`IQ 5S Audit Report - ${audit.id}`} /></div>
       </div>
 
-      <article className="audit-report-document mx-auto min-w-0 max-w-[1120px] space-y-5 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:space-y-7 sm:p-8">
+      <article className="mx-auto space-y-5 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:hidden">
+        <ReportHeader title={t("reports.auditReport")} reportId={audit.title} subtitle={`${audit.plant} · ${audit.area}`} status={<Badge variant="outline">{displayStatus}</Badge>} className="-mx-4 -mt-4" />
+        <ReportSection title={t("reports.auditSummary")}><div className="grid grid-cols-2 gap-2"><MobileMetric label="Compliance" value={`${scorePercent}%`} /><MobileMetric label="Score" value={`${audit.score} / ${audit.maxScore}`} /><MobileMetric label="Non-compliances" value={String(questions.filter((question) => question.score === 0).length)} /><MobileMetric label="Actions" value={String(actions.length)} /></div></ReportSection>
+        <ReportSection title={t("reports.auditDetails")}><MobileDetails items={[["Plant", audit.plant], ["Zone", audit.area], ["Auditor", audit.auditor], ["Zone Leader", zoneLeader], ["Audit Completion Date", formatDateTime(audit.dueDate, locale)], ["Completed", formatDateTime(audit.completedAt, locale)]]} /></ReportSection>
+        <ReportSection title={t("reports.sectionPerformance")}><div className="grid gap-2">{audit.sections.map((section) => { const answered = section.questions.filter((question) => question.score !== null).length; const nc = section.questions.filter((question) => question.score === 0).length; return <article key={section.category} className="rounded-lg border p-3"><div className="flex items-start justify-between gap-3"><h3 className="font-semibold">{section.category}</h3><Badge variant="outline">{percentage(section.score, section.maxScore)}%</Badge></div><dl className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><dt className="text-muted-foreground">Questions</dt><dd className="font-semibold">{answered}/{section.questions.length}</dd></div><div><dt className="text-muted-foreground">Score</dt><dd className="font-semibold">{section.score}/{section.maxScore}</dd></div><div><dt className="text-muted-foreground">NCs</dt><dd className="font-semibold">{nc}</dd></div></dl></article>; })}</div></ReportSection>
+        <ReportSection title="Question Results"><div className="space-y-4">{audit.sections.map((section, sectionIndex) => <section key={section.category}><h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">{String(sectionIndex + 1).padStart(2, "0")} · {section.category}</h3><div className="space-y-2">{section.questions.map((question, questionIndex) => <QuestionFinding key={question.id} question={question} number={questionIndex + 1} />)}</div></section>)}</div></ReportSection>
+        <ReportSection title={t("reports.correctiveActions")}>{actions.length ? <div className="grid gap-3">{actions.map((action) => <article key={action.id} className="rounded-lg border p-3"><div className="flex items-start justify-between gap-2"><p className="font-mono text-xs font-semibold text-primary">{action.id}</p><Badge variant="outline">{action.status}</Badge></div><h3 className="mt-2 font-semibold">{action.title}</h3><p className="mt-2 text-sm leading-6"><span className="text-muted-foreground">Final Action Plan:</span> {action.actionPlan ?? action.proposedAction ?? action.description}</p><MobileDetails items={[["Responsible", action.responsiblePersonName ?? action.assignedTo], ["Priority", action.priority], ["Due Date", formatDateTime(action.dueDate, locale)]]} /></article>)}</div> : <p className="text-sm text-muted-foreground">No corrective actions were created for this audit.</p>}</ReportSection>
+        {(audit.auditorVerification || audit.auditorSignature) && <ReportSection title="Auditor Verification"><div className="grid gap-3">{audit.auditorVerification && <img src={audit.auditorVerification.photoUrl ?? audit.auditorVerification.photo} alt={`${audit.auditor} live verification`} className="aspect-[4/3] w-full rounded-lg border object-cover" />}<img src={audit.auditorVerification?.signatureUrl ?? audit.auditorVerification?.signature ?? audit.auditorSignature?.signatureImage} alt={`${audit.auditor} signature`} className="h-28 w-full rounded-lg border bg-white object-contain p-2" /><MobileDetails items={[["Completed By", audit.completedByName ?? audit.auditor], ["Verified At", formatDateTime(audit.auditorVerification?.capturedAt ?? audit.auditorSignature?.signedAt, locale)]]} /></div></ReportSection>}
+      </article>
+
+      <article className="audit-report-document mx-auto hidden min-w-0 max-w-[1120px] space-y-5 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:space-y-7 sm:p-8 md:block print:block">
         <ReportHeader
           title={t("reports.auditReport")}
           reportId={audit.title}
@@ -195,7 +199,7 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
             <div><p className="text-3xl font-bold tabular-nums">{scorePercent}%</p><p className="text-sm text-muted-foreground">Overall Compliance</p></div>
             <p className="text-xl font-semibold tabular-nums">{audit.score} / {audit.maxScore}</p>
             <div className="flex flex-wrap gap-2">
-              {[0, 1, 2].map((score) => <Badge key={score} variant="outline" className={SCORE_STYLES[score]}>{score} — {SCORE_LABELS[score]}</Badge>)}
+              {([0, 1, 2] as const).map((score) => <Badge key={score} variant="outline" className={SCORE_STYLES[score]}>{score} — {AUDIT_SCORE_LABELS[score]}</Badge>)}
             </div>
           </div>
         </ReportSection>
@@ -280,12 +284,20 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
   );
 }
 
+function MobileMetric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg border bg-slate-50 p-3 dark:bg-slate-800"><p className="text-lg font-bold">{value}</p><p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p></div>;
+}
+
+function MobileDetails({ items }: { items: Array<[string, string | undefined | null]> }) {
+  return <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">{items.filter(([, value]) => Boolean(value)).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}</dl>;
+}
+
 function QuestionFinding({ question, number }: { question: FiveSQuestion; number: number }) {
   const score = question.score;
   const border = score === 0 ? "border-l-red-500" : score === 1 ? "border-l-amber-500" : "border-l-green-500";
   return (
     <article className={`audit-report-block rounded-md border border-l-4 border-slate-200 p-3 dark:border-slate-700 ${border}`}>
-      <div className="flex items-start justify-between gap-3"><p className="text-xs font-medium leading-5"><span className="mr-2 text-muted-foreground">Q{number}</span>{question.question}</p>{score !== null && <Badge variant="outline" className={`shrink-0 ${SCORE_STYLES[score]}`}>{score} — {SCORE_LABELS[score]}</Badge>}</div>
+      <div className="flex items-start justify-between gap-3"><p className="text-xs font-medium leading-5"><span className="mr-2 text-muted-foreground">Q{number}</span>{question.question}</p>{score !== null && <Badge variant="outline" className={`shrink-0 ${SCORE_STYLES[score]}`}>{score} — {getAuditScoreLabel(score)}</Badge>}</div>
       <div className="mt-2 grid gap-2 text-xs sm:grid-cols-[1fr_auto_auto]">
         <p><span className="text-muted-foreground">Observation:</span> {question.observation || "No observation recorded"}</p>
         <p><span className="text-muted-foreground">Action:</span> {question.actionId ? "Created" : "None"}</p>

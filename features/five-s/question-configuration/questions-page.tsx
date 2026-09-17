@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ImageIcon, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ImageIcon, Pencil, Plus, Settings2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -27,6 +28,7 @@ import type { QuestionDefinition, QuestionDefinitionInput } from "./types";
 type EditorState = { sectionId: FiveSCategory; question?: QuestionDefinition } | null;
 
 export default function FiveSQuestionsPage() {
+  const router = useRouter();
   const currentUser = useCurrentUser();
   const users = useAdminUsers();
   const definitions = useQuestionConfiguration();
@@ -53,24 +55,34 @@ export default function FiveSQuestionsPage() {
   }
 
   return <PageContainer className="max-w-none">
-    <FiveSPageHeader eyebrow="Settings / Audit Configuration" title="5S Questions" description="Manage the questions used in 5S audits." />
+    <FiveSPageHeader eyebrow="Audit / Audit Configuration" title="Audit Configuration" description="Manage the questions used in 5S audits." leading={<Button type="button" variant="ghost" size="icon-sm" className="size-11 md:size-8" onClick={() => router.push("/5s/audits")} aria-label="Back to Audits"><ArrowLeft className="size-4" /></Button>} />
     {(message || error) && <div role={error ? "alert" : "status"} className={`rounded-lg border px-4 py-3 text-sm ${error ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400"}`}>{error || message}</div>}
     <div className="grid gap-4">
       {FIVE_S_CATEGORIES.map((sectionId) => {
         const questions = definitions.filter((item) => item.sectionId === sectionId && item.active).sort((a, b) => a.displayOrder - b.displayOrder);
         return <Card key={sectionId} className="gap-0 overflow-hidden">
           <div className="flex items-start justify-between gap-4 border-b bg-muted/20 px-4 py-3 sm:px-5">
-            <div><div className="flex items-center gap-2"><h2 className="text-sm font-bold uppercase tracking-[.08em]">{sectionId}</h2><Badge variant="secondary">{questions.length}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{FIVE_S_CATEGORY_DESCRIPTIONS[sectionId]}</p></div>
-            <Button size="sm" variant="outline" onClick={() => { setError(""); setEditor({ sectionId }); }}><Plus className="size-4" />Add Question</Button>
+            <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-sm font-bold uppercase tracking-[.08em]">{sectionId}</h2><Badge variant="secondary">{questions.length}</Badge><Badge variant="muted">System section</Badge></div><p className="mt-1 text-xs text-muted-foreground">{FIVE_S_CATEGORY_DESCRIPTIONS[sectionId]} Section names are fixed.</p></div>
+            <Button size="sm" variant="outline" className="min-h-11 md:min-h-8" onClick={() => { setError(""); setEditor({ sectionId }); }}><Plus className="size-4" />Add Question</Button>
           </div>
           <CardContent className="p-0">
             {questions.length === 0 ? <p className="px-5 py-8 text-center text-sm text-muted-foreground">No active questions in this section.</p> : questions.map((question, index) => <div key={question.id} className="flex flex-col gap-3 border-b px-4 py-3 last:border-0 sm:flex-row sm:items-center sm:px-5">
               <div className="flex min-w-0 flex-1 items-start gap-3"><span className="mt-0.5 w-7 shrink-0 text-right font-mono text-xs font-semibold text-muted-foreground">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0"><p className="text-sm font-medium leading-6">{question.questionText}</p><div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground"><span>{question.required ? "Required" : "Optional"}</span><span>·</span><span>{question.referenceGuide.title}</span></div></div></div>
-              <div className="flex shrink-0 items-center justify-end gap-1 pl-10 sm:pl-0">
-                <Button size="icon-sm" variant="ghost" disabled={index === 0} aria-label={`Move ${question.questionText} up`} onClick={() => perform(() => moveQuestionDefinition(question.id, "up", currentUser.id), "Question order updated.")}><ArrowUp className="size-4" /></Button>
-                <Button size="icon-sm" variant="ghost" disabled={index === questions.length - 1} aria-label={`Move ${question.questionText} down`} onClick={() => perform(() => moveQuestionDefinition(question.id, "down", currentUser.id), "Question order updated.")}><ArrowDown className="size-4" /></Button>
-                <Button size="sm" variant="ghost" onClick={() => { setError(""); setEditor({ sectionId, question }); }}><Pencil className="size-4" />Edit</Button>
-                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleting(question)}><Trash2 className="size-4" />Delete</Button>
+              <div className="grid shrink-0 grid-cols-2 gap-3 pl-10 sm:flex sm:items-center sm:justify-end sm:gap-1 sm:pl-0">
+                <div className="min-w-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:sr-only">Reorder</p>
+                  <div className="flex gap-2 sm:gap-1">
+                    <Button size="icon-sm" className="size-11 md:size-8" variant="ghost" disabled={index === 0} aria-label={`Move ${question.questionText} up`} onClick={() => perform(() => moveQuestionDefinition(question.id, "up", currentUser.id), "Question order updated.")}><ArrowUp className="size-4" /></Button>
+                    <Button size="icon-sm" className="size-11 md:size-8" variant="ghost" disabled={index === questions.length - 1} aria-label={`Move ${question.questionText} down`} onClick={() => perform(() => moveQuestionDefinition(question.id, "down", currentUser.id), "Question order updated.")}><ArrowDown className="size-4" /></Button>
+                  </div>
+                </div>
+                <div className="min-w-0 border-l pl-3 sm:flex sm:border-l-0 sm:pl-0">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:sr-only">Manage</p>
+                  <div className="flex gap-2 sm:gap-1">
+                    <Button size="sm" variant="ghost" className="min-h-11 md:min-h-8" onClick={() => { setError(""); setEditor({ sectionId, question }); }}><Pencil className="size-4" />Edit</Button>
+                    <Button size="sm" variant="ghost" className="min-h-11 text-destructive hover:text-destructive md:min-h-8" onClick={() => setDeleting(question)}><Trash2 className="size-4" />Deactivate</Button>
+                  </div>
+                </div>
               </div>
             </div>)}
           </CardContent>
@@ -83,7 +95,7 @@ export default function FiveSQuestionsPage() {
       else addQuestionDefinition(editor.sectionId, input, currentUser.id);
       setEditor(null);
     }, editor?.question ? "Question updated." : "Question added.")} />
-    <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete question?</AlertDialogTitle><AlertDialogDescription>This removes the question from future audits. Existing audit records will not be changed.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (!deleting) return; perform(() => deactivateQuestionDefinition(deleting.id, currentUser.id), "Question removed from future audits."); setDeleting(null); }}>Delete Question</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Deactivate question?</AlertDialogTitle><AlertDialogDescription>This question will no longer appear in new audits. Existing, in-progress, and completed audit snapshots remain unchanged.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (!deleting) return; perform(() => deactivateQuestionDefinition(deleting.id, currentUser.id), "Question deactivated for future audits."); setDeleting(null); }}>Deactivate Question</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </PageContainer>;
 }
 

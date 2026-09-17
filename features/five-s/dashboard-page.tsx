@@ -263,6 +263,7 @@ export default function FiveSDashboardPage() {
   const [preview, setPreview] = useState<MyActionEvidence | null>(null);
   const [dashboardView, setDashboardView] = useState<DashboardView>("overview");
   const [selectedImprovementId, setSelectedImprovementId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState("");
 
   const zoneMemberOptions = useMemo(() => {
     return getDashboardZoneMembers(actions, zoneFilter);
@@ -354,6 +355,7 @@ export default function FiveSDashboardPage() {
     const demo = MVP_DASHBOARD_DATA;
 
     return {
+      usingSampleData: useMvpDemo,
       totalAudits: useMvpDemo ? demo.summary.totalAudits : filteredAudits.length,
       completedAudits: useMvpDemo ? demo.summary.completedAudits : filteredAudits.filter((item) => item.status === "Completed").length,
       draftAudits: useMvpDemo ? demo.summary.draftAudits : filteredAudits.filter((item) => item.status === "Draft").length,
@@ -447,10 +449,15 @@ export default function FiveSDashboardPage() {
   function handleCompleteAudit(
     completedAudit: FiveSAudit
   ) {
-    updateFiveSAudit(
+    const updated = updateFiveSAudit(
       completedAudit.id,
       completedAudit
     );
+
+    if (updated) {
+      setSuccessMessage("Audit completed successfully.");
+      window.setTimeout(() => setSuccessMessage(""), 3000);
+    }
 
     setSelectedAudit(null);
 
@@ -514,8 +521,11 @@ export default function FiveSDashboardPage() {
         }
       />
 
-      <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/80 bg-card p-1 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <nav className="flex min-w-0 gap-1 overflow-x-auto" aria-label="Dashboard views">
+      {successMessage && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400">{successMessage}</div>}
+
+      <div className="grid min-w-0 gap-2 lg:grid-cols-[auto_minmax(0,1fr)]">
+        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl border border-border/80 bg-card p-1 shadow-sm" aria-label="Dashboard views">
+          <span className="hidden px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground xl:inline">View</span>
           {([
             ["overview", t("dashboard.overview")],
             ["nc-summary", t("dashboard.ncSummary")],
@@ -526,37 +536,48 @@ export default function FiveSDashboardPage() {
             </Button>
           ))}
         </nav>
-        <div className="flex min-w-0 flex-wrap items-center gap-1 border-t px-1 pt-1 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0" role="group" aria-label="Dashboard time range">
-          <DashboardFilter value={zoneFilter} onChange={(value) => { setZoneFilter(value); setZoneMemberFilter("All"); }} label="All zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} />
-          {dashboardView !== "overview" && <Select value={effectiveZoneMemberFilter} onValueChange={(value) => setZoneMemberFilter(value ?? "All")}>
-            <SelectTrigger className="h-9 min-w-44" aria-label="Zone Member"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="All">All Zone Members</SelectItem>{zoneMemberOptions.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent>
-          </Select>}
-          {(["week", "month", "year", "custom"] as const).map((value) => (
-            <Button key={value} type="button" size="sm" variant={period === value ? "secondary" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="shrink-0 capitalize">
-              {value === "week" ? t("common.weekly") : value === "month" ? t("common.monthly") : value === "year" ? t("common.yearly") : t("common.custom")}
-            </Button>
-          ))}
-          {period === "custom" && <div className="flex min-w-0 flex-wrap items-center gap-1 pl-1">
-            <input aria-label="Dashboard start date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring" />
+        <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/80 bg-card p-1 shadow-sm lg:flex-row lg:items-center lg:justify-end lg:gap-1" role="group" aria-label="Dashboard filters">
+          <span className="hidden px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground xl:inline">Filters</span>
+          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:items-center lg:gap-1">
+            <DashboardFilter value={zoneFilter} onChange={(value) => { setZoneFilter(value); setZoneMemberFilter("All"); }} label="All zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} />
+            {dashboardView !== "overview" && <Select value={effectiveZoneMemberFilter} onValueChange={(value) => setZoneMemberFilter(value ?? "All")}>
+              <SelectTrigger className="h-11 w-full min-w-0 md:h-9 lg:min-w-44" aria-label="Zone Member"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="All">All Zone Members</SelectItem>{zoneMemberOptions.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent>
+            </Select>}
+          </div>
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0" aria-label="Dashboard time range">
+            {(["week", "month", "year", "custom"] as const).map((value) => (
+              <Button key={value} type="button" size="sm" variant={period === value ? "secondary" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="min-h-11 shrink-0 capitalize md:min-h-8">
+                {value === "week" ? t("common.weekly") : value === "month" ? t("common.monthly") : value === "year" ? t("common.yearly") : t("common.custom")}
+              </Button>
+            ))}
+          </div>
+          {period === "custom" && <div className="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-1 lg:flex lg:pl-1">
+            <Input aria-label="Dashboard start date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs md:h-9" />
             <span className="text-xs text-muted-foreground">to</span>
-            <input aria-label="Dashboard end date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring" />
+            <Input aria-label="Dashboard end date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs md:h-9" />
           </div>}
         </div>
       </div>
 
-      {dashboardView === "overview" && <section className="grid min-w-0 gap-4">
+      {dashboardView === "overview" && <section className="grid min-w-0 gap-5">
+        <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">Audit Summary</h2>{metrics.usingSampleData && <Badge variant="secondary">Showing sample data</Badge>}</div>
         <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <DashboardKpi value={metrics.totalAudits} label="Total audits" tone="info" />
           <DashboardKpi value={metrics.completedAudits} label="Completed audits" tone="success" />
           <DashboardKpi value={metrics.draftAudits} label="Draft audits" tone="warning" />
           <DashboardKpi value={metrics.inProgressAudits} label="In progress" tone="info" />
           <DashboardKpi value={`${metrics.averageScore}%`} label={t("dashboard.auditScore")} tone={metrics.averageScore < 60 ? "danger" : metrics.averageScore < 80 ? "warning" : "success"} />
+        </div>
+        <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">Action Summary</h2>
+        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
           <DashboardKpi value={metrics.openActions} label="Open actions" tone="warning" />
           <DashboardKpi value={metrics.overdueActions} label="Overdue actions" tone="danger" />
           <DashboardKpi value={metrics.completedActions} label="Closed actions" tone="success" />
           <DashboardKpi value={metrics.nonCompliances} label="Non-compliances" tone="danger" />
         </div>
+
+        <Card className="gap-0 overflow-hidden"><CardHeader className="border-b bg-muted/15"><CardTitle className="text-base">{t("dashboard.attentionRequired")}</CardTitle><p className="text-sm text-muted-foreground">Open corrective actions ranked by urgency.</p></CardHeader><CardContent className="p-0">{metrics.attention.length ? <div className="divide-y">{metrics.attention.map((action) => <button key={action.id} type="button" onClick={() => router.push(`/5s/actions/${encodeURIComponent(action.id)}`)} className="flex min-h-14 w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"><span className="min-w-0"><span className="block truncate text-sm font-semibold">{action.title}</span><span className="mt-1 block text-xs text-muted-foreground">{action.id} · {action.area} · Due {formatDashboardDate(action.dueDate)}</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant={action.priority === "Critical" || action.priority === "High" ? "danger" : "warning"}>{action.priority}</Badge><ActionStatusBadge status={action.status} /></span></button>)}</div> : <p className="p-6 text-sm text-muted-foreground">No open corrective actions require attention.</p>}</CardContent></Card>
 
         <div className="grid min-w-0 gap-4 lg:grid-cols-2">
           <AuditScoreTrend data={metrics.auditTrend} change={metrics.trendChange} />
@@ -578,6 +599,7 @@ export default function FiveSDashboardPage() {
             setSelectedImprovementId(action.id);
             setDashboardView("before-after");
           }}
+          onViewAction={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}`)}
           onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)}
         />
       )}
@@ -594,12 +616,12 @@ export default function FiveSDashboardPage() {
         />
       )}
 
-      <Dialog open={Boolean(preview)} onOpenChange={(open)=>!open&&setPreview(null)}><DialogContent className="max-w-5xl"><DialogHeader><DialogTitle>{preview?.name}</DialogTitle></DialogHeader>{preview?.type === "image" && preview.url ? <img src={preview.url} alt={preview.name} className="max-h-[75vh] w-full object-contain" /> : <div className="grid min-h-52 place-items-center text-muted-foreground"><ImageIcon className="size-9" /></div>}</DialogContent></Dialog>
+      <Dialog open={Boolean(preview)} onOpenChange={(open)=>!open&&setPreview(null)}><DialogContent className="!w-[calc(100vw-24px)] !max-w-5xl [&_[data-slot=dialog-close]]:size-11 md:[&_[data-slot=dialog-close]]:size-8"><DialogHeader><DialogTitle>{preview?.evidenceType === "resolution" ? "After Photo" : "Before Photo"}</DialogTitle><DialogDescription>{preview ? `${preview.name} · Uploaded by ${preview.uploadedBy} · ${formatDashboardDate(preview.uploadedAt)}` : "Evidence preview"}</DialogDescription></DialogHeader>{preview?.type === "image" && preview.url ? <img src={preview.url} alt={preview.name} className="max-h-[75vh] w-full object-contain" /> : <div className="grid min-h-52 place-items-center text-muted-foreground"><ImageIcon className="size-9" /></div>}</DialogContent></Dialog>
     </PageContainer>
   );
 }
 
-function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember, onPreview, onOpen, onReport }: { actions: MyAction[]; dashboardZone:string; memberFiltered: boolean; onClearMember: () => void; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
+function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember, onPreview, onOpen, onViewAction, onReport }: { actions: MyAction[]; dashboardZone:string; memberFiltered: boolean; onClearMember: () => void; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onViewAction: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
   const zones = useMemo(() => FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name), []);
   const [selectedZones,setSelectedZones]=useState<string[]>(()=>dashboardZone==="All"?zones:[dashboardZone]);
   const [fromDate,setFromDate]=useState(""); const [toDate,setToDate]=useState("");
@@ -610,44 +632,69 @@ function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember,
   const filteredActions=actions.filter((action)=>selectedZones.includes(action.area)&&(!fromDate||action.createdAt.slice(0,10)>=fromDate)&&(!toDate||action.createdAt.slice(0,10)<=toDate));
   function toggleZone(zone:string,checked:boolean){setSelectedZones(current=>checked?[...new Set([...current,zone])]:current.filter(item=>item!==zone));}
   function openExport(){if(filteredActions.length)setExportOpen(true);}
+  function clearFilters(){setSelectedZones([...zones]);setFromDate("");setToDate("");if(memberFiltered)onClearMember();}
   return (
     <Card className="min-w-0 overflow-hidden">
       <CardHeader className="grid-cols-1 gap-x-6 gap-y-3 border-b bg-muted/15 pb-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:pb-6">
-        <div className="min-w-0"><CardTitle className="text-base">Non-compliance summary</CardTitle><p className="mt-1 text-sm leading-5 text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p></div>
+        <div className="min-w-0"><CardTitle className="text-base">Non-Compliance Summary</CardTitle><p className="mt-1 text-sm leading-5 text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p></div>
         <CardAction className="col-start-1 row-start-2 w-full justify-self-stretch sm:col-start-2 sm:row-span-1 sm:row-start-1 sm:w-auto sm:justify-self-end">
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="grid w-full grid-cols-2 gap-2 md:hidden">
+            <details className="group relative col-span-1">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-sm marker:content-none">More Filters <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span></summary>
+              <div className="absolute left-0 top-[calc(100%+0.5rem)] z-30 grid w-[min(20rem,calc(100vw-3rem))] gap-2 rounded-lg border bg-popover p-3 shadow-lg">
+                <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="outline" className="min-h-11 w-full justify-between bg-background shadow-none"/>}>{zoneLabel}<span className="text-muted-foreground">▾</span></DropdownMenuTrigger><DropdownMenuContent align="start" className="w-52"><DropdownMenuCheckboxItem checked={allZonesSelected} onCheckedChange={(checked)=>setSelectedZones(checked?[...zones]:[])}>All zones</DropdownMenuCheckboxItem>{zones.map(zone=><DropdownMenuCheckboxItem key={zone} checked={selectedZones.includes(zone)} onCheckedChange={(checked)=>toggleZone(zone,checked)}>{zone}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu>
+                <div className="grid grid-cols-2 gap-2"><Input aria-label="Non-Compliance summary from date" type="date" value={fromDate} max={toDate||undefined} onChange={(event)=>setFromDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs"/><Input aria-label="Non-Compliance summary to date" type="date" value={toDate} min={fromDate||undefined} onChange={(event)=>setToDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs"/></div>
+                <Button type="button" variant="ghost" className="min-h-11" disabled={!hasActiveFilters&&!memberFiltered} onClick={clearFilters}><RotateCcw className="size-4"/>Clear Filters</Button>
+              </div>
+            </details>
+            <Button type="button" variant="outline" className="min-h-11 w-full bg-background shadow-none" disabled={!filteredActions.length} onClick={openExport}><Download className="size-4"/>Export</Button>
+          </div>
+          <div className="hidden w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap md:items-center md:justify-end">
             <DropdownMenu><DropdownMenuTrigger render={<Button type="button" size="sm" variant="outline" className="col-span-2 min-w-40 justify-between bg-background shadow-none sm:col-span-1"/>}>{zoneLabel}<span className="text-muted-foreground">▾</span></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-52"><DropdownMenuCheckboxItem checked={allZonesSelected} onCheckedChange={(checked)=>setSelectedZones(checked?[...zones]:[])}>All zones</DropdownMenuCheckboxItem>{zones.map(zone=><DropdownMenuCheckboxItem key={zone} checked={selectedZones.includes(zone)} onCheckedChange={(checked)=>toggleZone(zone,checked)}>{zone}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu>
-            <input aria-label="NC summary from date" type="date" value={fromDate} max={toDate||undefined} onChange={(event)=>setFromDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"/>
-            <input aria-label="NC summary to date" type="date" value={toDate} min={fromDate||undefined} onChange={(event)=>setToDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"/>
-            <Button type="button" size="sm" variant="ghost" className="col-span-2 sm:col-span-1" disabled={!hasActiveFilters} onClick={()=>{setSelectedZones([...zones]);setFromDate("");setToDate("")}}><RotateCcw className="size-4"/>Clear Filters</Button>
+            <Input aria-label="Non-Compliance summary from date" type="date" value={fromDate} max={toDate||undefined} onChange={(event)=>setFromDate(event.target.value)} className="h-9 min-w-0 px-2 text-xs"/>
+            <Input aria-label="Non-Compliance summary to date" type="date" value={toDate} min={fromDate||undefined} onChange={(event)=>setToDate(event.target.value)} className="h-9 min-w-0 px-2 text-xs"/>
+            <Button type="button" size="sm" variant="ghost" className="col-span-2 min-h-11 sm:col-span-1 md:min-h-8" disabled={!hasActiveFilters&&!memberFiltered} onClick={clearFilters}><RotateCcw className="size-4"/>Clear Filters</Button>
             <Button type="button" size="sm" variant="outline" className="col-span-2 w-full bg-background shadow-none sm:col-span-1 sm:w-auto" disabled={!filteredActions.length} onClick={openExport}><Download className="size-4" /> Export</Button>
           </div>
         </CardAction>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1480px] border-collapse text-left text-xs">
-            <thead className="bg-muted/45 text-[11px] uppercase tracking-wide text-muted-foreground">
-              <tr>{["Zone", "Observed", "Problem description", "Before", "Responsible", "Status", "Due date", "Action taken", "After", "Closed", "Report"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-4 py-3 font-semibold">{heading}</th>)}</tr>
+        <div className="grid gap-3 p-3 md:hidden">
+          {filteredActions.length ? filteredActions.map((action) => {
+            const before=action.issueEvidence?.find((item)=>item.type==="image"&&item.url);
+            const after=action.evidence.find((item)=>item.type==="image"&&item.url);
+            return <article key={action.id} className="min-w-0 rounded-xl border bg-card p-4 shadow-sm">
+              <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-mono text-sm font-semibold text-primary">{action.id}</p><p className="mt-1 truncate text-xs text-muted-foreground">{action.category??"5S"} · {action.area}</p></div><ActionStatusBadge status={action.status}/></div>
+              <p className="mt-3 line-clamp-3 text-sm font-medium leading-5">{action.originalFinding??action.description}</p>
+              <div className="mt-3 flex items-center justify-between gap-3 border-y py-2.5 text-xs"><span className="min-w-0 truncate font-medium">{action.responsiblePersonName??action.assignedTo??"Unassigned"}</span><span className="shrink-0 text-muted-foreground">{action.priority} · {formatDashboardDate(action.dueDate)}</span></div>
+              <div className="mt-3 grid grid-cols-2 gap-2"><MobileEvidencePreview label="Before" evidence={before} emptyLabel="No Before Evidence" onPreview={onPreview}/><MobileEvidencePreview label="After" evidence={after} emptyLabel="Awaiting After Evidence" onPreview={onPreview}/></div>
+              <div className="mt-3 grid grid-cols-2 gap-2"><Button type="button" variant="outline" className="min-h-11" onClick={()=>onViewAction(action)}>View Action</Button>{action.status==="Completed"?<Button type="button" className="min-h-11" onClick={()=>onReport(action)}>View Report</Button>:<Button type="button" variant="outline" className="min-h-11" onClick={()=>onOpen(action)}>View Evidence</Button>}</div>
+            </article>;
+          }):<div className="grid min-h-48 place-items-center rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground"><div><p>{memberFiltered?"No corrective actions found for this Zone Member.":"No non-compliances match the selected filters."}</p>{(hasActiveFilters||memberFiltered)&&<Button type="button" variant="outline" className="mt-4 min-h-11" onClick={clearFilters}>Clear Filters</Button>}</div></div>}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-muted/95 text-xs uppercase tracking-wide text-muted-foreground backdrop-blur">
+              <tr>{["Zone", "Observed", "Problem description", "Before", "Responsible", "Status", "Due date", "Action taken", "After", "Closed", "Report"].map((heading) => <th key={heading} className="whitespace-nowrap border-b px-3 py-3 font-semibold">{heading}</th>)}</tr>
             </thead>
             <tbody className="divide-y">
               {filteredActions.length ? filteredActions.map((action) => {
                 const before = action.issueEvidence?.find((item) => item.type === "image" && item.url);
                 const after = action.evidence.find((item) => item.type === "image" && item.url);
                 return <tr key={action.id} className="bg-card align-top transition-colors hover:bg-muted/20">
-                  <td className="whitespace-nowrap px-4 py-3 font-semibold">{action.area}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.createdAt)}</td>
-                  <td className="max-w-64 px-4 py-3"><button type="button" onClick={() => onOpen(action)} className="text-left font-medium hover:text-primary hover:underline">{action.originalFinding ?? action.description}</button></td>
-                  <td className="px-4 py-3"><EvidenceThumbnail evidence={before} onPreview={onPreview} /></td>
-                  <td className="whitespace-nowrap px-4 py-3">{action.responsiblePersonName ?? action.assignedTo}</td>
-                  <td className="whitespace-nowrap px-4 py-3"><ActionStatusBadge status={action.status} /></td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.dueDate)}</td>
-                  <td className="max-w-64 px-4 py-3 text-muted-foreground">{action.actionTakenDescription ?? action.resolutionObservation ?? "—"}</td>
-                  <td className="px-4 py-3"><EvidenceThumbnail evidence={after} onPreview={onPreview} /></td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.completedAt)}</td>
-                  <td className="px-4 py-3"><Button type="button" size="sm" variant="ghost" onClick={() => action.status === "Completed" ? onReport(action) : onOpen(action)}>{action.status === "Completed" ? "Report" : "View"}<ExternalLink className="size-3.5" /></Button></td>
+                  <td className="whitespace-nowrap px-3 py-3 font-semibold">{action.area}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{formatDashboardDate(action.createdAt)}</td>
+                  <td className="max-w-52 px-3 py-3"><button type="button" onClick={() => onOpen(action)} className="line-clamp-3 text-left font-medium hover:text-primary hover:underline">{action.originalFinding ?? action.description}</button></td>
+                  <td className="px-3 py-3"><EvidenceThumbnail evidence={before} onPreview={onPreview} /></td>
+                  <td className="max-w-36 px-3 py-3">{action.responsiblePersonName ?? action.assignedTo}</td>
+                  <td className="whitespace-nowrap px-3 py-3"><ActionStatusBadge status={action.status} /></td>
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{formatDashboardDate(action.dueDate)}</td>
+                  <td className="max-w-52 px-3 py-3 text-muted-foreground"><span className="line-clamp-3">{action.actionTakenDescription ?? action.resolutionObservation ?? "—"}</span></td>
+                  <td className="px-3 py-3"><EvidenceThumbnail evidence={after} onPreview={onPreview} /></td>
+                  <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{formatDashboardDate(action.completedAt)}</td>
+                  <td className="px-3 py-3"><Button type="button" size="sm" variant="ghost" onClick={() => action.status === "Completed" ? onReport(action) : onOpen(action)}>{action.status === "Completed" ? "Report" : "View"}<ExternalLink className="size-3.5" /></Button></td>
                 </tr>;
-              }) : <tr><td colSpan={11} className="px-6 py-16 text-center text-sm text-muted-foreground"><p>{memberFiltered ? "No corrective actions found for this Zone Member." : "No non-compliances match the selected filters."}</p>{memberFiltered && <Button type="button" size="sm" variant="ghost" className="mt-3" onClick={onClearMember}>View all members</Button>}</td></tr>}
+              }) : <tr><td colSpan={11} className="px-6 py-16 text-center text-sm text-muted-foreground"><p>{memberFiltered ? "No corrective actions found for this Zone Member." : "No non-compliances match the selected filters."}</p>{(hasActiveFilters||memberFiltered)&&<Button type="button" size="sm" variant="ghost" className="mt-3" onClick={clearFilters}>Clear Filters</Button>}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -676,7 +723,7 @@ function ExportNCSummaryDialog({ open, actions, onOpenChange }: { open: boolean;
   }
   return <Dialog open={open} onOpenChange={handleOpenChange}>
     <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:!max-w-4xl">
-      <DialogHeader className="shrink-0 border-b px-5 py-4 sm:px-6"><DialogTitle>Export NC Summary</DialogTitle><DialogDescription>Choose the NC records you want to export.</DialogDescription></DialogHeader>
+      <DialogHeader className="shrink-0 border-b px-5 py-4 sm:px-6"><DialogTitle>Export Non-Compliance Summary</DialogTitle><DialogDescription>Choose the Non-Compliance records you want to export.</DialogDescription></DialogHeader>
       <div className="grid min-h-0 gap-3 px-5 py-4 sm:px-6">
         <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input value={query} onChange={(event)=>setQuery(event.target.value)} className="pl-9" placeholder="Search NC ID, Zone, Member..." aria-label="Search export records"/></div>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/15 px-3 py-2.5">
@@ -684,21 +731,26 @@ function ExportNCSummaryDialog({ open, actions, onOpenChange }: { open: boolean;
           <div className="flex items-center gap-3"><span className="text-xs font-medium text-muted-foreground">{selectedCount} of {actions.length} selected</span><Button type="button" size="sm" variant="ghost" disabled={!selectedCount} onClick={()=>setSelectedIds([])}>Clear All</Button></div>
         </div>
         <div className="min-h-0 overflow-auto rounded-lg border">
-          <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+          <div className="divide-y md:hidden">{searchedActions.map((action)=><label key={action.id} htmlFor={`export-${action.id}`} className="flex min-h-20 cursor-pointer items-start gap-3 p-3 active:bg-muted/30"><Checkbox id={`export-${action.id}`} className="mt-1 size-5" checked={selectedIds.includes(action.id)} onCheckedChange={(checked)=>toggleAction(action.id,Boolean(checked))} aria-label={`Select ${action.id}`}/><span className="min-w-0 flex-1"><span className="flex items-start justify-between gap-2"><span className="truncate font-mono text-sm font-semibold text-primary">{action.id}</span><ActionStatusBadge status={action.status}/></span><span className="mt-1 block truncate text-xs text-muted-foreground">{action.category??"—"} · {action.area}</span><span className="mt-1 flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{action.responsiblePersonName??action.assignedTo??"Unassigned"}</span><span className="shrink-0 font-medium">{action.priority}</span></span></span></label>)}</div>
+          <table className="hidden w-full min-w-[700px] border-collapse text-left text-xs md:table">
             <thead className="sticky top-0 z-10 bg-muted/90 uppercase tracking-wide text-muted-foreground backdrop-blur"><tr>{["", "NC / Action ID", "5S Category", "Zone", "Responsible Zone Member", "Priority", "Status"].map((heading,index)=><th key={`${heading}-${index}`} className="whitespace-nowrap border-b px-3 py-2.5 font-semibold">{heading}</th>)}</tr></thead>
             <tbody className="divide-y">{searchedActions.map((action)=><tr key={action.id} className="hover:bg-muted/20"><td className="px-3 py-3"><Checkbox checked={selectedIds.includes(action.id)} onCheckedChange={(checked)=>toggleAction(action.id,Boolean(checked))} aria-label={`Select ${action.id}`}/></td><td className="whitespace-nowrap px-3 py-3 font-mono font-semibold text-primary">{action.id}</td><td className="whitespace-nowrap px-3 py-3">{action.category??"—"}</td><td className="whitespace-nowrap px-3 py-3">{action.area}</td><td className="whitespace-nowrap px-3 py-3">{action.responsiblePersonName??action.assignedTo??"—"}</td><td className="whitespace-nowrap px-3 py-3">{action.priority}</td><td className="whitespace-nowrap px-3 py-3"><ActionStatusBadge status={action.status}/></td></tr>)}</tbody>
           </table>
-          {!searchedActions.length&&<div className="grid min-h-32 place-items-center p-6 text-sm text-muted-foreground">No NC records match this search.</div>}
+          {!searchedActions.length&&<div className="grid min-h-32 place-items-center p-6 text-center text-sm text-muted-foreground"><div><p>No NC records match this search.</p>{query&&<Button type="button" variant="outline" className="mt-3 min-h-11 md:min-h-9" onClick={()=>setQuery("")}>Clear Search</Button>}</div></div>}
         </div>
       </div>
-      <DialogFooter className="shrink-0 border-t px-5 py-3 sm:px-6"><Button type="button" variant="outline" onClick={()=>onOpenChange(false)}>Cancel</Button><Button type="button" disabled={!selectedCount} onClick={exportSelected}><Download className="size-4"/>Export Selected ({selectedCount})</Button></DialogFooter>
+      <DialogFooter className="shrink-0 border-t px-5 py-3 sm:px-6"><span className="mb-1 text-center text-xs font-medium text-muted-foreground sm:mb-0 sm:mr-auto sm:self-center">{selectedCount} selected</span><Button type="button" variant="outline" className="min-h-11 md:min-h-9" onClick={()=>onOpenChange(false)}>Cancel</Button><Button type="button" className="min-h-11 md:min-h-9" disabled={!selectedCount} onClick={exportSelected}><Download className="size-4"/>Export Selected ({selectedCount})</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
 
 function EvidenceThumbnail({ evidence, onPreview }: { evidence?: MyActionEvidence; onPreview: (evidence: MyActionEvidence) => void }) {
-  if (!evidence?.url) return <span className="grid size-12 place-items-center rounded-lg border bg-muted/30 text-muted-foreground"><ImageIcon className="size-4" /></span>;
-  return <button type="button" onClick={() => onPreview(evidence)} className="block size-12 overflow-hidden rounded-lg border transition hover:ring-2 hover:ring-primary/30"><img src={evidence.url} alt={evidence.name} className="size-full object-cover" /></button>;
+  if (!evidence?.url) return <span className="grid size-14 place-items-center rounded-lg border bg-muted/30 text-muted-foreground"><ImageIcon className="size-4" /></span>;
+  return <button type="button" onClick={() => onPreview(evidence)} className="block size-14 overflow-hidden rounded-lg border transition hover:ring-2 hover:ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Preview ${evidence.name}`}><img src={evidence.url} alt={evidence.name} className="size-full object-cover" /></button>;
+}
+
+function MobileEvidencePreview({label,evidence,emptyLabel,onPreview}:{label:string;evidence?:MyActionEvidence;emptyLabel:string;onPreview:(evidence:MyActionEvidence)=>void}){
+  return <div className="min-w-0"><p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>{evidence?.url?<button type="button" className="block aspect-[4/3] w-full overflow-hidden rounded-lg border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={()=>onPreview(evidence)} aria-label={`Preview ${label} evidence`}><img src={evidence.url} alt={evidence.name} className="size-full object-cover"/></button>:<div className="grid aspect-[4/3] place-items-center rounded-lg border border-dashed bg-muted/20 px-2 text-center text-xs text-muted-foreground">{emptyLabel}</div>}</div>;
 }
 
 function BeforeAfterView({ action, actions, memberFiltered, onClearMember, onSelect, onPreview, onReport }: { action?: MyAction; actions: MyAction[]; memberFiltered: boolean; onClearMember: () => void; onSelect: (id: string) => void; onPreview: (evidence: MyActionEvidence) => void; onReport: (action: MyAction) => void }) {
@@ -757,7 +809,7 @@ function DashboardKpi({ value, label, detail, tone = "neutral" }: { value: strin
   return <Card className="min-w-0 gap-0"><CardContent className="flex min-h-28 flex-col items-center justify-center p-4 text-center xl:min-h-0 xl:flex-1"><p className={`max-w-full break-words text-2xl font-bold tracking-tight ${tones[tone]}`}>{value}</p><p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p>{detail && <p className="mt-1 text-[10px] text-muted-foreground">{detail}</p>}</CardContent></Card>;
 }
 
-function DashboardFilter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <Select value={value} onValueChange={(next)=>onChange(next ?? "All")}><SelectTrigger className="h-9 min-w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">{label}</SelectItem>{options.map((option)=><SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select>; }
+function DashboardFilter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <Select value={value} onValueChange={(next)=>onChange(next ?? "All")}><SelectTrigger className="h-11 w-full min-w-0 md:h-9 lg:min-w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">{label}</SelectItem>{options.map((option)=><SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select>; }
 
 function formatDashboardDate(value?: string) { if (!value) return "—"; const date = new Date(value.includes("T") ? value : `${value}T00:00:00`); return new Intl.DateTimeFormat("en-IN",{day:"2-digit",month:"short",year:"numeric"}).format(date); }
 
@@ -794,4 +846,4 @@ function BeforeAfterPrintReport({ actions }: { actions: MyAction[] }) {
   return <section className="before-after-print-report hidden bg-white text-slate-950 print:block"><ReportHeader title="5S Before & After Report" metadata={<>Generated {formatDashboardDate(new Date().toISOString())}</>} className="px-0 pt-0" /><div className="mt-6 space-y-6">{actions.map((item) => { const before=item.issueEvidence?.find((e)=>e.type==="image"&&e.url); const after=item.evidence.find((e)=>e.type==="image"&&e.url); return <article key={item.id} className="before-after-print-pair break-inside-avoid rounded-lg border border-slate-300 p-4"><div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-700">{item.auditId ?? item.sourceTitle} · {item.area} · {item.category}</p><h2 className="mt-1 text-lg font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.originalFinding ?? item.description}</p></div><span className="text-sm font-semibold">{item.status}</span></div><div className="mt-4 grid grid-cols-2 gap-4">{[["Before",before],["After",after]].map(([label,evidence])=><div key={String(label)}><p className="mb-2 text-xs font-bold uppercase">{String(label)}</p>{typeof evidence === "object" && evidence?.url ? <img src={evidence.url} alt={evidence.name} className="aspect-[16/10] w-full rounded border object-contain" /> : <div className="grid aspect-[16/10] place-items-center rounded border bg-slate-50 text-sm text-slate-400">No image attached</div>}</div>)}</div><dl className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><dt className="text-slate-500">Responsible</dt><dd className="font-semibold">{item.responsiblePersonName ?? item.assignedTo ?? "—"}</dd></div><div><dt className="text-slate-500">Completed</dt><dd className="font-semibold">{formatDashboardDate(item.closedAt ?? item.completedAt)}</dd></div><div><dt className="text-slate-500">Zone Leader / reviewer</dt><dd className="font-semibold">{item.reviewedByRole === "Zone Leader" ? item.reviewedBy ?? item.zoneLeaderName ?? "—" : item.closedBy ?? item.zoneLeaderName ?? "—"}</dd></div><div><dt className="text-slate-500">Due date</dt><dd className="font-semibold">{formatDashboardDate(item.dueDate)}</dd></div></dl></article>; })}</div></section>;
 }
 
-function ActionStatusBadge({ status }: { status: MyActionStatus }) { const variant = status === "Completed" ? "success" : status === "Overdue" || status === "Rework Required" ? "danger" : status === "In Progress" || status === "Awaiting Review" ? "warning" : "info"; return <Badge variant={variant}>{getActionStatusLabel(status)}</Badge>; }
+function ActionStatusBadge({ status }: { status: MyActionStatus }) { const variant = status === "Completed" ? "success" : status === "Overdue" || status === "Rework Required" ? "danger" : status === "Awaiting Assignment" ? "muted" : "info"; return <Badge variant={variant}>{getActionStatusLabel(status)}</Badge>; }

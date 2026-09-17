@@ -15,6 +15,7 @@ interface UiPreferencesContextValue extends UiPreferences {
   setNavigationPosition: (position: NavigationPosition) => void
   setAccentColor: (color: AccentColor) => void
   setLanguage: (language: AppLanguage) => void
+  setSidebarCollapsed: (collapsed: boolean) => void
 }
 
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | null>(null)
@@ -24,6 +25,16 @@ function applyPreferences(preferences: UiPreferences) {
   document.documentElement.dataset.accent = preferences.accentColor
   document.documentElement.lang = preferences.language
   document.documentElement.dataset.language = preferences.language
+  document.documentElement.dataset.sidebar = preferences.sidebarCollapsed ? "collapsed" : "expanded"
+}
+
+function readStoredSidebarPreference() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(UI_PREFERENCES_STORAGE_KEY) ?? "null") as Partial<UiPreferences> | null
+    return stored?.sidebarCollapsed === true
+  } catch {
+    return DEFAULT_UI_PREFERENCES.sidebarCollapsed
+  }
 }
 
 function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
@@ -39,6 +50,7 @@ function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
       navigationPosition: navigationPosition ?? DEFAULT_UI_PREFERENCES.navigationPosition,
       accentColor: accentColor ?? DEFAULT_UI_PREFERENCES.accentColor,
       language: language ?? DEFAULT_UI_PREFERENCES.language,
+      sidebarCollapsed: readStoredSidebarPreference(),
     }
   })
 
@@ -56,6 +68,8 @@ function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
       updatePreferences({ ...preferences, accentColor }),
     setLanguage: (language) =>
       updatePreferences({ ...preferences, language }),
+    setSidebarCollapsed: (sidebarCollapsed) =>
+      updatePreferences({ ...preferences, sidebarCollapsed }),
   }), [preferences])
 
   return (

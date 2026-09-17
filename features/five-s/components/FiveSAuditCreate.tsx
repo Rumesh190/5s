@@ -114,6 +114,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
   const [zone, setZone] = useState<string>("");
   const [dueDate, setDueDate] = useState(defaultDueDate);
   const [starting, setStarting] = useState(false);
+  const [zoneError, setZoneError] = useState("");
 
   const selectedZone = getFiveSZoneConfiguration(zone);
   const generatedAuditTitle = zone
@@ -136,7 +137,11 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isValid || !selectedZone || starting || !canAuditZone(currentUser, selectedZone.name)) return;
+    if (selectedZone && !canAuditZone(currentUser, selectedZone.name)) {
+      setZoneError("You cannot audit this zone based on your current assignment.");
+      return;
+    }
+    if (!isValid || !selectedZone || starting) return;
 
     setStarting(true);
     window.setTimeout(() => onStart({ title: generatedAuditTitle, plant: currentUser.plant, department: selectedZone.department, area: selectedZone.name, auditor: currentUser.name, dueDate }), 220);
@@ -144,14 +149,14 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
 
   return (
     <div className="min-h-full w-full">
-      <div className="sticky top-0 z-30 -mx-6 border-b border-border bg-background/95 px-6 pt-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:-mx-8 lg:px-8">
+      <div className="sticky top-14 z-30 -mx-6 border-b border-border bg-background/95 px-6 pt-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 max-md:landscape:static md:top-0 lg:-mx-8 lg:px-8">
         <FiveSPageHeader
           eyebrow=""
           title="Create 5S Audit"
           description={generatedAuditTitle || t("audit.selectZoneForId")}
           className="border-b-0 pb-3"
           leading={
-            <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label={t("common.back")} className="-ml-2 shrink-0">
+            <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label={t("common.back")} className="-ml-2 size-11 shrink-0 md:size-9">
               <ArrowLeft className="size-4" />
             </Button>
           }
@@ -180,7 +185,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
 
                   <div className="grid gap-2">
                     <Label>{t("audit.zone")}</Label>
-                    <Select value={zone} onValueChange={(value) => setZone(value ?? "")}>
+                    <Select value={zone} onValueChange={(value) => { setZone(value ?? ""); setZoneError(""); }}>
                       <SelectTrigger className="h-11 min-h-11 w-full px-3">
                         <SelectValue placeholder={t("audit.selectZone")} />
                       </SelectTrigger>
@@ -190,6 +195,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
                         ))}
                       </SelectContent>
                     </Select>
+                    {(ownZoneSelected || zoneError) && <p role="alert" className="text-xs font-medium text-destructive">{zoneError || "You cannot audit this zone based on your current assignment."}</p>}
                   </div>
 
                   <div key={`leader-${zone}`} className="motion-success-in"><ReadOnlyField label={t("audit.zoneLeader")} value={selectedZone?.leader} placeholder={t("audit.selectZoneFirst")} /></div>

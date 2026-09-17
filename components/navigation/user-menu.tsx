@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Check, Languages, LogOut, Palette, Settings2, Users } from "lucide-react"
+import { Check, Languages, LogOut, Palette, Users } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -18,16 +18,11 @@ import { DEMO_USERS, setDemoRole, useCurrentUser } from "@/lib/current-user"
 import { LANGUAGE_OPTIONS } from "@/lib/i18n"
 import { useI18n } from "@/components/preferences/use-i18n"
 import { useAuth } from "@/components/auth/auth-provider"
-import { useAdminUsers } from "@/features/five-s/administration/store"
-import { hasPermission } from "@/features/five-s/administration/permissions"
 
 /** Avatar dropdown: My Profile, Settings, Logout — per the Component Library spec. */
 function UserMenu() {
   const [preferencesOpen, setPreferencesOpen] = React.useState(false)
   const currentUser = useCurrentUser()
-  const adminUsers = useAdminUsers()
-  const adminUser = adminUsers.find((user) => user.id === currentUser.id)
-  const canManageQuestions = Boolean(adminUser?.roles.includes("Admin") && hasPermission(adminUser, "administration.manage_questions"))
   const { language, setLanguage, t } = useI18n()
   const { logout } = useAuth()
 
@@ -88,10 +83,6 @@ function UserMenu() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {canManageQuestions && <DropdownMenuItem render={<Link href="/settings/audit-configuration/questions" />}>
-            <Settings2 />
-            Audit Configuration
-          </DropdownMenuItem>}
           <DropdownMenuItem render={<Link href="/profile" />}>
             <Users />
             {t("account.profile")}

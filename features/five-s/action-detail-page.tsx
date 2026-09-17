@@ -65,10 +65,10 @@ import { MAX_EVIDENCE_IMAGES } from "@/lib/evidence-images";
 const STATUS_VARIANTS = {
   Assigned: "info",
   Open: "info",
-  "In Progress": "warning",
+  "In Progress": "info",
   Overdue: "danger",
   "Awaiting Review": "info",
-  "Awaiting Assignment": "warning",
+  "Awaiting Assignment": "muted",
   "Rework Required": "danger",
   Completed: "success",
 } as const;
@@ -114,6 +114,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   const [preview, setPreview] = useState<MyActionEvidence | null>(null);
   const [afterCameraOpen, setAfterCameraOpen] = useState(false);
   const [pendingTransition, setPendingTransition] = useState<"start" | "submit" | "send-back" | "close" | null>(null);
+  const [successMessage, setSuccessMessage] = useState("");
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -159,6 +160,26 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   const canStart = isResponsible && ["Assigned", "Open", "Rework Required"].includes(action.status);
   const submitLabel = action.status === "Rework Required" ? "Resubmit for Review" : "Submit for Review";
   const validResolution = observation.trim() && Boolean(category) && action.evidence.length > 0 && Number.isFinite(Number(costSaving)) && Number(costSaving) >= 0;
+  const nextExpectedAction = action.status === "Completed"
+    ? "Closed — no further action required"
+    : canAssign
+      ? "Review the plan and assign a Zone Member"
+      : canReview
+        ? "Review the submitted work and make a decision"
+        : isResponsible && canStart
+          ? "Start work and complete the corrective measure"
+          : isResponsible && action.status === "In Progress"
+            ? "Complete the work and submit it for review"
+            : action.status === "Awaiting Review"
+              ? "Awaiting Zone Leader review"
+              : action.status === "Rework Required"
+                ? "Address the review feedback and resubmit"
+                : "Track the assigned corrective action";
+  const roleContext = canReview || canAssign
+    ? "Your role: Zone Leader · Assignment and review controls are available when this action reaches your step."
+    : isResponsible
+      ? "Your role: Zone Member · Complete the assigned work and submit evidence for Zone Leader review."
+      : "Your role: Auditor · You can monitor this action; approval and closure remain with the Zone Leader.";
 
   function syncFields(updated: MyAction | undefined) {
     if (!updated) return;
@@ -182,7 +203,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
     if (pendingTransition) return;
     const correctiveActionCategory = category;
     setPendingTransition("submit");
-    window.setTimeout(() => { syncFields(submitActionForReview(actionId, actor, { observation, correctiveActionCategory, costSaving: Number(costSaving) })); setPendingTransition(null); }, 220);
+    window.setTimeout(() => { const updated = submitActionForReview(actionId, actor, { observation, correctiveActionCategory, costSaving: Number(costSaving) }); syncFields(updated); if (updated) setSuccessMessage("Action submitted for Zone Leader review."); setPendingTransition(null); }, 220);
   }
 
   function startWork() {
@@ -212,12 +233,12 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   function confirmSendBack() {
     if (!remark.trim()) return;
     setPendingTransition("send-back");
-    window.setTimeout(() => { sendActionBack(actionId, actor, remark); setRemark(""); setSendBackOpen(false); setPendingTransition(null); }, 220);
+    window.setTimeout(() => { const updated = sendActionBack(actionId, actor, remark); if (updated) { setSuccessMessage("Action returned for rework."); setRemark(""); setSendBackOpen(false); } setPendingTransition(null); }, 220);
   }
 
   function confirmClose() {
     setPendingTransition("close");
-    window.setTimeout(() => { closeReviewedAction(actionId, actor); setCloseOpen(false); setPendingTransition(null); }, 260);
+    window.setTimeout(() => { const updated = closeReviewedAction(actionId, actor); if (updated) { setSuccessMessage("Action approved and closed."); setCloseOpen(false); } setPendingTransition(null); }, 260);
   }
 
   return (
@@ -227,7 +248,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
         title={action.title}
         description={`${action.status} · ${action.priority} priority · ${action.sourceTitle}`}
         leading={
-          <Button variant="ghost" size="icon-sm" onClick={() => router.push("/5s/actions")} aria-label="Back to Actions">
+          <Button variant="ghost" size="icon-sm" className="size-11 md:size-8" onClick={() => router.push("/5s/actions")} aria-label="Back to Actions">
             <ArrowLeft className="size-4" />
           </Button>
         }
@@ -241,11 +262,17 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
           </>
         }
         toolbar={
-          <div className="flex w-full min-w-0 items-center overflow-x-auto pb-0.5">
+          <div className="hidden w-full min-w-0 items-center overflow-x-auto pb-0.5 md:flex">
             <LifecycleTimeline action={action} />
           </div>
         }
       />
+
+      {successMessage && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400">{successMessage}</div>}
+
+      <div className="hidden rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground md:block">{roleContext}</div>
+
+      <MobileActionContext action={action} nextExpectedAction={nextExpectedAction} />
 
       {canAssign && <Panel title="Action Plan Assignment" icon={<ClipboardCheck className="size-4 text-primary" />}>
         <div className="grid gap-5">
@@ -273,7 +300,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
       <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[minmax(0,2.1fr)_minmax(300px,.9fr)]">
         <main className="grid gap-5">
-          <Panel title="Original Finding" icon={<AlertCircle className="size-4 text-red-600" />}>
+          <div className={isResponsible ? "order-2 md:order-none" : ""}><Panel title="Original Finding" icon={<AlertCircle className="size-4 text-red-600" />}>
             <div className="grid gap-5">
               <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Related Audit Question</p><p className="mt-2 text-sm font-medium leading-6">{action.questionText ?? "No related audit question recorded."}</p></div>
               <div className="rounded-lg border-l-4 border-red-500 bg-red-500/[0.045] px-4 py-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">Finding</p><p className="mt-2 text-base font-medium leading-7">{action.originalFinding ?? action.description}</p></div>
@@ -283,15 +310,15 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
                 <EvidenceSection eyebrow="Before" title="Original Finding Evidence" description="Read-only evidence captured by the auditor when this action was raised." evidence={action.issueEvidence ?? []} onPreview={setPreview} />
               </div>
             </div>
-          </Panel>
+          </Panel></div>
 
-          {!canAssign && <Panel title="Action Plan" icon={<ClipboardCheck className="size-4 text-primary" />}>
+          {!canAssign && <div className={isResponsible ? "order-1 md:order-none" : ""}><Panel title="Action Plan" icon={<ClipboardCheck className="size-4 text-primary" />}>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Approved plan for the responsible person</p>
             <p className="mt-2 text-base font-semibold leading-7">{action.actionPlan ?? action.proposedAction ?? action.description}</p>
             <div className="mt-4 grid gap-3 border-t pt-4 sm:grid-cols-2"><Meta label="Assigned By" value={action.assignedByName ?? action.zoneLeaderName ?? "—"}/><Meta label="Assigned On" value={formatDateTime(action.assignedAt)}/></div>
-          </Panel>}
+          </Panel></div>}
 
-          <Panel title="Corrective Measure" icon={<CheckCircle2 className="size-4 text-primary" />}>
+          <div className={isResponsible ? "order-3 md:order-none" : ""}><Panel title="Corrective Measure" icon={<CheckCircle2 className="size-4 text-primary" />}>
           {!isResponsible && action.submittedForReviewAt && (
             <div className="mb-4 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
               <p className="text-sm font-semibold text-primary">Submitted for Review</p>
@@ -308,7 +335,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
                 <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
                   <p className="text-sm font-semibold">Ready to begin corrective work?</p>
                   <p className="mt-1 text-xs text-muted-foreground">Start work to enable the corrective measure fields.</p>
-                  <Button className="mt-4" onClick={startWork} disabled={pendingTransition === "start"}>
+                  <Button className="mt-4 min-h-11 md:min-h-9" onClick={startWork} disabled={pendingTransition === "start"}>
                     <Play className="size-4" /> {pendingTransition === "start" ? "Starting..." : "Start Work"}
                   </Button>
                 </div>
@@ -353,21 +380,21 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
                 </div>
                 {canEdit && (
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                    <Button size="sm" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => setAfterCameraOpen(true)}><ImageIcon className="size-4" /> Take After Photo</Button>
+                    <Button size="sm" variant="outline" className="min-h-11 min-w-0 flex-1 sm:flex-none md:min-h-8" onClick={() => setAfterCameraOpen(true)}><ImageIcon className="size-4" /> Take After Photo</Button>
                   </div>
                 )}
               </div>
               <EvidenceGrid evidence={action.evidence} editable={canEdit} onPreview={setPreview} onRemove={(id) => removeActionEvidence(action.id, id)} emptyLabel="No resolution evidence attached" />
             </div>
 
-            {(action.issueEvidence?.length ?? 0) > 0 && action.evidence.length > 0 && <div className="border-t pt-4"><p className="mb-3 text-sm font-semibold">Before → After</p><div className="grid gap-5 sm:grid-cols-2 sm:divide-x"><EvidenceSection eyebrow="Before" title="Original condition" description="Auditor finding evidence" evidence={action.issueEvidence ?? []} onPreview={setPreview}/><div className="sm:pl-5"><EvidenceSection eyebrow="After" title="Corrected condition" description="Resolution evidence" evidence={action.evidence} onPreview={setPreview}/></div></div></div>}
+            {(action.issueEvidence?.length ?? 0) > 0 && action.evidence.length > 0 && <div className="border-t pt-4"><p className="mb-3 text-sm font-semibold">Before → After</p><div className="grid gap-5 sm:grid-cols-2 sm:divide-x"><EvidenceSection prominent eyebrow="Before" title="Original condition" description="Auditor finding evidence" evidence={action.issueEvidence ?? []} onPreview={setPreview}/><div className="sm:pl-5"><EvidenceSection prominent eyebrow="After" title="Corrected condition" description="Resolution evidence" evidence={action.evidence} onPreview={setPreview}/></div></div></div>}
 
-            {canEdit && action.status === "In Progress" && <div className="flex justify-end border-t pt-4"><Button variant="outline" onClick={saveProgress}>Save Progress</Button></div>}
+            {canEdit && action.status === "In Progress" && <div className="flex justify-end border-t pt-4"><Button variant="outline" className="min-h-11 md:min-h-9" onClick={saveProgress}>Save Progress</Button></div>}
 
             {canEdit && ["In Progress", "Rework Required"].includes(action.status) && (
               <div className="rounded-lg border bg-muted/15 p-4">
                 <p className="text-sm font-semibold">Ready for Review</p><div className="my-3 grid grid-cols-2 gap-3 sm:grid-cols-4"><Meta label="Observation" value={observation.trim()?"Completed":"Required"}/><Meta label="Corrective Category" value={category||"Required"}/><Meta label="Cost Saving" value={`₹${(Number(costSaving)||0).toLocaleString("en-IN")}`}/><Meta label="Evidence" value={`${action.evidence.length} attachment${action.evidence.length===1?"":"s"}`}/></div>
-                <Button className="w-full" disabled={!validResolution || pendingTransition === "submit"} onClick={submitForReview}>
+                <Button className="min-h-11 w-full md:min-h-9" disabled={!validResolution || pendingTransition === "submit"} onClick={submitForReview}>
                   <Send className="size-4" /> {pendingTransition === "submit" ? "Submitting..." : submitLabel}
                 </Button>
                 <p className="mt-2 text-center text-xs text-muted-foreground">Observation, Corrective Action Category, and resolution evidence are required.</p>
@@ -375,12 +402,12 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             )}
           </div>
           </div>
-        </Panel>
+        </Panel></div>
 
-          {canReview && <Panel title="Zone Leader Review" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm leading-6 text-muted-foreground">Review the original finding, final action plan, corrective measure, and Before/After evidence before making a decision.</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"><Button className="w-full sm:w-auto" variant="outline" onClick={()=>setSendBackOpen(true)}><RotateCcw className="size-4"/> Return for Rework</Button><Button className="w-full sm:w-auto" onClick={()=>setCloseOpen(true)}><CheckCircle2 className="size-4"/> Approve &amp; Close</Button></div></Panel>}
+          {canReview && <div className="order-4 md:order-none"><Panel title="Zone Leader Review" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm leading-6 text-muted-foreground">Review the original finding, final action plan, corrective measure, and Before/After evidence before making a decision.</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"><Button className="min-h-11 w-full sm:w-auto md:min-h-9" variant="outline" onClick={()=>setSendBackOpen(true)}><RotateCcw className="size-4"/> Return for Rework</Button><Button className="min-h-11 w-full sm:w-auto md:min-h-9" onClick={()=>setCloseOpen(true)}><CheckCircle2 className="size-4"/> Approve &amp; Close</Button></div></Panel></div>}
         </main>
 
-        <aside className="order-first min-w-0 2xl:order-none 2xl:sticky 2xl:top-4"><ActionSummary action={action} /></aside>
+        <aside className="order-last min-w-0 md:order-first 2xl:order-none 2xl:sticky 2xl:top-4"><ActionSummary action={action} /></aside>
       </div>
 
       <ReviewHistory action={action} />
@@ -394,10 +421,11 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
           <div>
             <label htmlFor="send-back-remark" className="text-sm font-medium">Remark *</label>
             <Textarea id="send-back-remark" className="mt-2 min-h-28" value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="Explain what needs correction..." />
+            {!remark.trim() && <p className="mt-2 text-xs text-muted-foreground">Add a rework comment before returning this action.</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSendBackOpen(false)}>Cancel</Button>
-            <Button variant="destructive" disabled={!remark.trim() || pendingTransition === "send-back"} onClick={confirmSendBack}>{pendingTransition === "send-back" ? "Returning..." : "Return for Rework"}</Button>
+            <Button variant="outline" className="min-h-11 md:min-h-9" onClick={() => setSendBackOpen(false)}>Cancel</Button>
+            <Button variant="destructive" className="min-h-11 md:min-h-9" disabled={!remark.trim() || pendingTransition === "send-back"} onClick={confirmSendBack}>{pendingTransition === "send-back" ? "Returning..." : "Return for Rework"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -409,8 +437,8 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             <DialogDescription>The Zone Leader approval will accept the submitted resolution and mark this action as completed.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCloseOpen(false)}>Cancel</Button>
-            <Button onClick={confirmClose} disabled={pendingTransition === "close"}>{pendingTransition === "close" ? "Closing..." : "Approve & Close"}</Button>
+            <Button variant="outline" className="min-h-11 md:min-h-9" onClick={() => setCloseOpen(false)}>Cancel</Button>
+            <Button className="min-h-11 md:min-h-9" onClick={confirmClose} disabled={pendingTransition === "close"}>{pendingTransition === "close" ? "Closing..." : "Approve & Close"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -426,11 +454,11 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
       {preview && (
         <div className="fixed inset-0 z-[10020] flex flex-col bg-slate-950/95" role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`}>
           <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 text-white">
-            <div className="min-w-0"><p className="truncate text-sm font-medium">{preview.name}</p><p className="text-xs text-slate-400">Uploaded by {preview.uploadedBy} · {formatDateTime(preview.uploadedAt)}</p></div>
+            <div className="min-w-0"><p className="truncate text-sm font-medium">{preview.evidenceType === "resolution" ? "After Photo" : "Before Photo"}</p><p className="truncate text-xs text-slate-400">{preview.name} · Uploaded by {preview.uploadedBy} · {formatDateTime(preview.uploadedAt)}</p></div>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon-sm" className="text-slate-300 hover:bg-white/10 hover:text-white" onClick={() => void previewRef.current?.requestFullscreen?.()} aria-label="Full screen"><Maximize2 className="size-4" /></Button>
-              {preview.url && <Button nativeButton={false} render={<a href={preview.url} target="_blank" rel="noreferrer" />} variant="ghost" size="icon-sm" className="text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Open original"><ExternalLink className="size-4" /></Button>}
-              <Button variant="ghost" size="icon-sm" className="text-slate-300 hover:bg-white/10 hover:text-white" onClick={() => setPreview(null)} aria-label="Close preview"><X className="size-4" /></Button>
+              <Button variant="ghost" size="icon-sm" className="size-11 text-slate-300 hover:bg-white/10 hover:text-white md:size-8" onClick={() => void previewRef.current?.requestFullscreen?.()} aria-label="Full screen"><Maximize2 className="size-4" /></Button>
+              {preview.url && <Button nativeButton={false} render={<a href={preview.url} target="_blank" rel="noreferrer" />} variant="ghost" size="icon-sm" className="size-11 text-slate-300 hover:bg-white/10 hover:text-white md:size-8" aria-label="Open original"><ExternalLink className="size-4" /></Button>}
+              <Button variant="ghost" size="icon-sm" className="size-11 text-slate-300 hover:bg-white/10 hover:text-white md:size-8" onClick={() => setPreview(null)} aria-label="Close preview"><X className="size-4" /></Button>
             </div>
           </div>
           <div ref={previewRef} className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-5">
@@ -481,6 +509,16 @@ function LifecycleTimeline({ action }: { action: MyAction }) {
   );
 }
 
+function MobileActionContext({ action, nextExpectedAction }: { action: MyAction; nextExpectedAction: string }) {
+  return <section className="rounded-xl border bg-card p-4 shadow-sm md:hidden" aria-label="Current action context">
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current task</p><p className="mt-1 truncate font-mono text-sm font-semibold text-primary">{action.id}</p></div><Badge variant={STATUS_VARIANTS[action.status]}>{getActionStatusLabel(action.status)}</Badge></div>
+    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-y py-3">
+      <Meta label="Priority" value={action.priority}/><Meta label="Due Date" value={formatDate(action.dueDate)}/><Meta label="Responsible" value={action.responsiblePersonName??action.assignedTo??"Unassigned"}/><Meta label="Zone" value={action.area}/>
+    </dl>
+    <div className="mt-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next expected action</p><p className="mt-1 text-sm font-medium leading-5">{nextExpectedAction}</p></div>
+  </section>;
+}
+
 function ActionSummary({ action }: { action: MyAction }) {
   return (
     <Panel title="Action Summary">
@@ -528,13 +566,13 @@ function ReviewHistory({ action }: { action: MyAction }) {
   );
 }
 
-function EvidenceSection({ eyebrow, title, description, evidence, onPreview }: { eyebrow?: string; title: string; description: string; evidence: MyActionEvidence[]; onPreview: (item: MyActionEvidence) => void }) {
-  return <div>{eyebrow && <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${eyebrow === "Before" ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>{eyebrow}</p>}<p className={eyebrow ? "mt-1 text-sm font-semibold" : "text-sm font-semibold"}>{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p><EvidenceGrid evidence={evidence} editable={false} onPreview={onPreview} onRemove={() => undefined} emptyLabel={eyebrow === "After" ? "No resolution evidence submitted" : "No original finding evidence attached"} /></div>;
+function EvidenceSection({ eyebrow, title, description, evidence, onPreview, prominent = false }: { eyebrow?: string; title: string; description: string; evidence: MyActionEvidence[]; onPreview: (item: MyActionEvidence) => void; prominent?: boolean }) {
+  return <div>{eyebrow && <p className={`text-xs font-bold uppercase tracking-[0.14em] md:text-[10px] ${eyebrow === "Before" ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>{eyebrow}</p>}<p className={eyebrow ? "mt-1 text-sm font-semibold" : "text-sm font-semibold"}>{title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>{prominent&&evidence.length?<div className="mt-3 grid gap-2">{evidence.map((item)=><button key={item.id} type="button" className="min-h-11 overflow-hidden rounded-lg border bg-muted text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={()=>onPreview(item)}>{item.type==="image"&&item.url?<img src={item.url} alt={item.name} className="aspect-video w-full object-cover"/>:<span className="flex min-h-32 flex-col items-center justify-center gap-2 p-4 text-xs text-muted-foreground"><FileText className="size-6"/>{item.name}</span>}<span className="block truncate bg-background px-3 py-2 text-xs font-medium">{item.name}</span></button>)}</div>:<EvidenceGrid evidence={evidence} editable={false} onPreview={onPreview} onRemove={() => undefined} emptyLabel={eyebrow === "After" ? "No resolution evidence submitted" : "No original finding evidence attached"} />}</div>;
 }
 
 function EvidenceGrid({ evidence, editable, onPreview, onRemove, emptyLabel = "No evidence attached" }: { evidence: MyActionEvidence[]; editable: boolean; onPreview: (item: MyActionEvidence) => void; onRemove: (id: string) => void; emptyLabel?: string }) {
   if (evidence.length === 0) return <div className="mt-3 flex min-h-24 items-center justify-center rounded-lg border border-dashed bg-muted/15 text-center"><div><Paperclip className="mx-auto size-5 text-muted-foreground" /><p className="mt-2 text-xs text-muted-foreground">{emptyLabel}</p></div></div>;
-  return <div className="mt-3 grid gap-2 sm:grid-cols-2">{evidence.map((item) => <div key={item.id} className="group flex min-w-0 items-center gap-3 rounded-lg border bg-background p-2.5"><button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => onPreview(item)}><span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">{item.type === "image" && item.url ? <img src={item.url} alt="" className="size-full object-cover" /> : <FileText className="size-5 text-muted-foreground" />}</span><span className="min-w-0"><span className="block truncate text-xs font-medium">{item.name}</span><span className="mt-0.5 block text-[11px] text-muted-foreground">Uploaded by {item.uploadedBy}</span><span className="block text-[10px] text-muted-foreground">{formatDateTime(item.uploadedAt)}</span></span></button>{editable && <Button variant="ghost" size="icon-sm" onClick={() => onRemove(item.id)} aria-label={`Remove ${item.name}`}><X className="size-4" /></Button>}</div>)}</div>;
+  return <div className="mt-3 grid gap-2 sm:grid-cols-2">{evidence.map((item) => <div key={item.id} className="group flex min-w-0 items-center gap-3 rounded-lg border bg-background p-2.5"><button type="button" className="flex min-h-14 min-w-0 flex-1 items-center gap-3 text-left" onClick={() => onPreview(item)}><span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">{item.type === "image" && item.url ? <img src={item.url} alt={item.name} className="size-full object-cover" /> : <FileText className="size-5 text-muted-foreground" />}</span><span className="min-w-0"><span className="block truncate text-xs font-medium">{item.name}</span><span className="mt-0.5 block text-xs text-muted-foreground">Uploaded by {item.uploadedBy}</span><span className="block text-xs text-muted-foreground">{formatDateTime(item.uploadedAt)}</span></span></button>{editable && <Button variant="ghost" size="icon-sm" className="size-11 md:size-8" onClick={() => onRemove(item.id)} aria-label={`Remove ${item.name}`}><X className="size-4" /></Button>}</div>)}</div>;
 }
 
 function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
@@ -542,7 +580,7 @@ function Panel({ title, icon, children }: { title: string; icon?: React.ReactNod
 }
 
 function Meta({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
-  return <div><p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{label}</p><p className="mt-1 flex items-center gap-1.5 break-words text-xs font-medium leading-5">{icon}{value || "—"}</p></div>;
+  return <div><p className="text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground md:text-[11px]">{label}</p><p className="mt-1 flex items-center gap-1.5 break-words text-xs font-medium leading-5">{icon}{value || "—"}</p></div>;
 }
 
 function ReadOnlyValue({ value }: { value: string }) {

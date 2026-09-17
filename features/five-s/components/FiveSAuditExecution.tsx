@@ -68,6 +68,7 @@ import { optimizeEvidenceImage, MAX_EVIDENCE_IMAGES } from "@/lib/evidence-image
 import { createAction, getActionById, updateAction } from "@/lib/actions/action-store";
 import { updateFiveSAudit } from "@/lib/five-s/audit-store";
 import { didRequiredAnswersBecomeComplete } from "@/lib/five-s/audit-completion";
+import { getAuditScoreLabel } from "@/lib/five-s/audit-score";
 import { AUDIT_LIFECYCLE_STAGES } from "@/lib/five-s/lifecycle-status";
 import { useCurrentUser } from "@/lib/current-user";
 import {
@@ -130,14 +131,6 @@ const CATEGORY_ORDER: FiveSCategory[] = [
 
 const SCORE_OPTIONS = [0, 1, 2];
 
-const SCORE_LABELS: Record<
-  number,
-  string
-> = {
-  0: "Non Compliance",
-  1: "Partially Compliance",
-  2: "Fully Compliance",
-};
 
 const SCORE_STYLES: Record<
   number,
@@ -1508,13 +1501,14 @@ function FiveSAuditExecution({
   if (showReview) {
     return (
       <div className="flex min-w-0 flex-col md:min-h-[calc(100dvh-7rem)]">
-        <div className="sticky top-14 z-30 min-w-0 border-b bg-background/95 px-0 py-3 backdrop-blur md:top-0 md:px-6 lg:px-8">
+        <div className="sticky top-14 z-30 min-w-0 border-b bg-background/95 px-0 py-3 backdrop-blur max-md:landscape:static md:top-0 md:px-6 lg:px-8">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-3">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
+                className="size-11 md:size-9"
                 onClick={() =>
                   setShowReview(
                     false
@@ -1530,9 +1524,7 @@ function FiveSAuditExecution({
                 </h1>
 
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Review all questions
-                  before completing
-                  the audit.
+                  Review your audit before final submission. Submitting continues to auditor verification.
                 </p>
               </div>
             </div>
@@ -1755,9 +1747,7 @@ function FiveSAuditExecution({
                                         }{" "}
                                         ·{" "}
                                         {
-                                          SCORE_LABELS[
-                                            state.score
-                                          ]
+                                          getAuditScoreLabel(state.score)
                                         }
                                       </Badge>
                                     )}
@@ -1821,7 +1811,7 @@ function FiveSAuditExecution({
           )}
         <FinalAuditVerificationDialog
           open={showCompleteConfirmation}
-          questionCount={allQuestions.length}
+          auditId={audit.id}
           auditor={audit.auditor}
           onOpenChange={setShowCompleteConfirmation}
           onComplete={handleCompleteAudit}
@@ -1846,7 +1836,27 @@ function FiveSAuditExecution({
       )}
       {/* FIXED HEADER */}
 
-      {!fullScreen && <div className="w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8">
+      {!fullScreen && <div className="w-full min-w-0 max-w-full shrink-0 border-b bg-background md:hidden">
+        <div className="flex min-w-0 items-center gap-2 px-1 py-2">
+          {onBack && <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Exit audit" className="size-11 shrink-0"><ArrowLeft className="size-4" /></Button>}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold" title={audit.title}>{audit.title}</p>
+            <p className="truncate text-xs text-muted-foreground">{audit.area} · {answeredQuestions}/{allQuestions.length} answered</p>
+          </div>
+          {audit.status === "Completed" ? (
+            <Button type="button" variant="outline" className="min-h-11" onClick={handleGenerateReport}><FileBarChart className="size-4" />Report</Button>
+          ) : auditReadyForCompletion ? (
+            <Button type="button" className="min-h-11" onClick={requestAuditCompletion}><CheckCircle2 className="size-4" />Submit</Button>
+          ) : (
+            <div className="flex shrink-0 gap-1">
+              <Button type="button" variant="ghost" size="icon" className="size-11" onClick={handleSaveDraft} disabled={saving} aria-label={saving ? "Saving audit" : "Save audit draft"}><Save className="size-4" /></Button>
+              <Button type="button" className="min-h-11" onClick={() => setShowReview(true)}>{t("audit.review")}</Button>
+            </div>
+          )}
+        </div>
+      </div>}
+
+      {!fullScreen && <div className="hidden w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:block md:px-6 lg:px-8">
         <FiveSPageHeader
           eyebrow=""
           title={`5S Audit · ${audit.title}`}
@@ -1943,19 +1953,22 @@ function FiveSAuditExecution({
           </aside>
 
           <div className={fullScreen ? "hidden" : "min-w-0 lg:hidden"}>
-            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground" htmlFor="audit-section-selector">5S section</label>
-            <Select value={String(activeSectionIndex)} onValueChange={(value) => navigateToSection(Number(value))}>
-              <SelectTrigger id="audit-section-selector" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {sections.map((section, index) => {
-                  const completed = section.questions.filter(isQuestionComplete).length;
-                  return <SelectItem key={section.category} value={String(index)} disabled={!isSectionUnlocked(index)}>{auditSectionName(language, section.category)} · {completed}/{section.questions.length}</SelectItem>;
-                })}
-              </SelectContent>
-            </Select>
-            <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${completionPercentage}%` }} /></div><span>{answeredQuestions}/{allQuestions.length} · {completionPercentage}%</span></div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground" htmlFor="audit-section-selector">5S section</label>
+            <div className="flex items-center gap-2">
+              <Select value={String(activeSectionIndex)} onValueChange={(value) => navigateToSection(Number(value))}>
+                <SelectTrigger id="audit-section-selector" className="min-h-11 min-w-0 flex-1 md:min-h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {sections.map((section, index) => {
+                    const completed = section.questions.filter(isQuestionComplete).length;
+                    return <SelectItem key={section.category} value={String(index)} disabled={!isSectionUnlocked(index)}>{auditSectionName(language, section.category)} · {completed}/{section.questions.length}</SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+              <Button type="button" size="icon" variant="outline" className="size-11 shrink-0 md:hidden" onClick={() => setFullScreen(true)} aria-label="Enter full screen"><Maximize2 className="size-4" /></Button>
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${completionPercentage}%` }} /></div><span>{answeredQuestions}/{allQuestions.length} · {completionPercentage}%</span></div>
           </div>
 
           <main className="min-w-0 lg:h-full lg:min-h-0">
@@ -1963,7 +1976,7 @@ function FiveSAuditExecution({
             <Card className="gap-0 overflow-hidden lg:h-full lg:min-h-0">
               {/* REDUCED SECTION HEADER */}
 
-              <CardHeader className="shrink-0 border-b border-border/55 py-3">
+              <CardHeader className={fullScreen ? "shrink-0 border-b border-border/55 py-3" : "hidden shrink-0 border-b border-border/55 py-3 md:block"}>
                 <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-primary/35 bg-primary/[0.035] text-xs font-semibold text-primary">
@@ -1986,7 +1999,7 @@ function FiveSAuditExecution({
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2 pl-12 text-left md:pl-0 md:text-right">
-                    <Button type="button" size="sm" variant="outline" onClick={() => setFullScreen((value) => !value)} aria-label={fullScreen ? "Exit full screen" : "Enter full screen"}>
+                    <Button type="button" size="sm" className="min-h-11 md:min-h-8" variant="outline" onClick={() => setFullScreen((value) => !value)} aria-label={fullScreen ? "Exit full screen" : "Enter full screen"}>
                       {fullScreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                       {fullScreen ? "Exit" : "Full Screen"}
                     </Button>
@@ -2039,7 +2052,7 @@ function FiveSAuditExecution({
                             ref={(element) => { questionItemRefs.current[question.id] = element; }}
                             className="relative min-w-0 scroll-mt-20 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden"
                           >
-                            <span className={`absolute left-0 top-3.5 z-10 flex size-6 items-center justify-center rounded-full border bg-background ${state.score === 2 ? "border-emerald-500 text-emerald-600" : state.score === 1 ? "border-amber-500 text-amber-600" : state.score === 0 ? "border-red-500 text-red-600" : "border-border text-muted-foreground"}`}>
+                            <span role="img" aria-label={state.score !== null ? "Answered" : "Not started"} className={`absolute left-0 top-3.5 z-10 flex size-6 items-center justify-center rounded-full border bg-background ${state.score === 2 ? "border-emerald-500 text-emerald-600" : state.score === 1 ? "border-amber-500 text-amber-600" : state.score === 0 ? "border-red-500 text-red-600" : "border-border text-muted-foreground"}`}>
                               {complete ? <Check className="size-3.5" /> : state.score === 0 ? <AlertCircle className="size-3.5" /> : <span className="size-1.5 rounded-full bg-current" />}
                             </span>
                             <div className="flex min-w-0 items-start gap-1">
@@ -2053,14 +2066,14 @@ function FiveSAuditExecution({
                               <span className="pt-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">{String(questionIndex + 1).padStart(2, "0")}</span>
                               <span className="min-w-0 flex-1">
                                 <span className="block whitespace-normal break-words text-sm font-medium leading-5 [overflow-wrap:anywhere]">{auditQuestionText(language, activeSection.category, questionIndex, question.question)}</span>
-                                <span className="mt-1 block text-[11px] text-muted-foreground">
+                                <span className="mt-1 block text-xs text-muted-foreground md:text-[11px]">
                                   {state.observation.trim() ? t("audit.observationAdded") : t("audit.noObservation")}
                                   {state.actionId ? ` · ${t("audit.oneAction")}` : ""}
                                   {state.evidence.length ? ` · ${state.evidence.length} ${t("audit.evidence")}` : ""}
                                 </span>
                               </span>
                               <span className="flex shrink-0 items-center gap-2">
-                                {state.score !== null ? <Badge className={SCORE_STYLES[state.score]}><span className="sm:hidden" aria-hidden="true">{state.score}</span><span className="hidden sm:inline">{state.score} · {state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")}</span><span className="sr-only sm:hidden">{state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")}</span></Badge> : <span className="hidden text-[11px] text-muted-foreground sm:inline">{t("audit.notAnswered")}</span>}
+                                {state.score !== null ? <Badge className={SCORE_STYLES[state.score]}><span className="sm:hidden" aria-hidden="true">{state.score}</span><span className="hidden sm:inline">{state.score} · {state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")}</span><span className="sr-only sm:hidden">Answered: {state.score === 0 ? t("score.zero") : state.score === 1 ? t("score.one") : t("score.two")}</span></Badge> : <span className="text-[11px] font-medium text-muted-foreground">Not started</span>}
                                 <ChevronDown className="size-4 text-muted-foreground" />
                               </span>
                             </button>
@@ -2149,7 +2162,7 @@ function FiveSAuditExecution({
                                   {t("audit.score")}
                                 </p>
 
-                                <div className="grid min-w-0 gap-2 md:grid-cols-3">
+                                <div className="grid min-w-0 gap-2 md:grid-cols-3" role="radiogroup" aria-label={`${t("audit.score")} — ${auditQuestionText(language, activeSection.category, questionIndex, question.question)}`}>
                                   {SCORE_OPTIONS.map(
                                     (
                                       score
@@ -2164,7 +2177,8 @@ function FiveSAuditExecution({
                                             score
                                           }
                                           type="button"
-                                          aria-pressed={selected}
+                                          role="radio"
+                                          aria-checked={selected}
                                           disabled={!questionUnlocked}
                                           onClick={() =>
                                             handleScoreChange(
@@ -2234,7 +2248,7 @@ function FiveSAuditExecution({
                                     </span>
                                   )}
                                 </label>
-                                <span className="text-[11px] tabular-nums text-muted-foreground">
+                                <span className="text-xs tabular-nums text-muted-foreground md:text-[11px]">
                                   {state.observation.length} / 1000
                                 </span>
                                 </div>
@@ -2282,7 +2296,7 @@ function FiveSAuditExecution({
                                       {t("audit.action")} <span className="font-normal text-muted-foreground">({requiresAction ? t("common.required") : t("common.optional")})</span>
                                     </p>
 
-                                    <p className="text-[11px] text-muted-foreground">
+                                    <p className="text-xs text-muted-foreground md:text-[11px]">
                                       {requiresAction
                                         ? t("audit.requiredForLowScore")
                                         : t("common.optional")}
@@ -2292,12 +2306,12 @@ function FiveSAuditExecution({
 
                                 {createdAction ? (
                                   <div className="min-w-0 rounded-lg border border-emerald-500/20 bg-background/80 p-3 shadow-sm">
-                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-400">
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700 md:text-[10px] dark:text-emerald-400">
                                       <CheckCircle2 className="size-3.5" />
                                       {t("audit.actionCreated")}
                                     </div>
                                     <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-5">{createdAction.title}</p>
-                                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] sm:grid-cols-3">
+                                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs md:text-[11px] sm:grid-cols-3">
                                       <div className="min-w-0"><dt className="text-muted-foreground">Responsible</dt><dd className="mt-0.5 truncate font-medium">{createdAction.responsiblePersonName || createdAction.assignedTo || createdAction.zoneLeaderName || "Unassigned"}</dd></div>
                                       <div><dt className="text-muted-foreground">Priority</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.priority === "Critical" || createdAction.priority === "High" ? "danger" : createdAction.priority === "Medium" ? "warning" : "info"}>{createdAction.priority}</Badge></dd></div>
                                       <div><dt className="text-muted-foreground">Due</dt><dd className="mt-0.5 font-medium">{new Date(`${createdAction.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</dd></div>
@@ -2306,7 +2320,7 @@ function FiveSAuditExecution({
                                       {createdAction.issueEvidence?.length ? <div><dt className="text-muted-foreground">Evidence</dt><dd className="mt-0.5 font-medium">{createdAction.issueEvidence.length} attached</dd></div> : null}
                                     </dl>
                                     <div className="mt-3 flex justify-end border-t border-border/60 pt-2">
-                                      <Button type="button" size="sm" variant="ghost" disabled={!questionUnlocked} onClick={() => openActionDialog(question)}>
+                                      <Button type="button" size="sm" className="min-h-11 md:min-h-8" variant="ghost" disabled={!questionUnlocked} onClick={() => openActionDialog(question)}>
                                         <Eye className="mr-1.5 size-3.5" />
                                         {t("common.view")} {t("audit.action")} <span aria-hidden="true">→</span>
                                       </Button>
@@ -2316,7 +2330,7 @@ function FiveSAuditExecution({
                                   <Button
                                     type="button"
                                     size="sm"
-                                    className="self-center"
+                                    className="min-h-11 self-center md:min-h-8"
                                     disabled={!questionUnlocked}
                                     variant={requiresAction ? "default" : "outline"}
                                     onClick={() => openActionDialog(question)}
@@ -2341,7 +2355,7 @@ function FiveSAuditExecution({
                                       </p>
                                     </div>
 
-                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                    <p className="mt-1 text-xs text-muted-foreground md:text-[11px]">
                                       {t("audit.attachEvidence")}
                                     </p>
                                   </div>
@@ -2396,7 +2410,7 @@ function FiveSAuditExecution({
                                       type="button"
                                       size="sm"
                                       variant="outline"
-                                      className="order-2 sm:order-1"
+                                      className="order-2 min-h-11 sm:order-1 md:min-h-8"
                                       disabled={!questionUnlocked}
                                       onClick={() =>
                                         fileInputRefs.current[
@@ -2412,7 +2426,7 @@ function FiveSAuditExecution({
                                       type="button"
                                       size="sm"
                                       variant="outline"
-                                      className="order-1 sm:order-2"
+                                      className="order-1 min-h-11 sm:order-2 md:min-h-8"
                                       disabled={!questionUnlocked}
                                       onClick={() =>
                                         cameraInputRefs.current[
@@ -2428,7 +2442,7 @@ function FiveSAuditExecution({
 
                                 {state.evidence.length > 0 && (
                                   <div className="mt-4 border-t border-border/60 pt-3">
-                                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground md:text-[11px]">
                                       {t("audit.uploadedEvidence")}
                                     </p>
 
@@ -2470,10 +2484,10 @@ function FiveSAuditExecution({
                                               <span className="block truncate text-xs font-medium" title={evidence.name}>
                                                 {evidence.name}
                                               </span>
-                                              <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              <span className="mt-0.5 block text-xs uppercase tracking-wide text-muted-foreground md:text-[10px]">
                                                 {getEvidenceFileLabel(evidence)} · {formatEvidenceSize(evidence.size)}
                                               </span>
-                                              <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary">
+                                              <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-primary md:text-[11px]">
                                                 <Eye className="size-3" /> View
                                               </span>
                                             </span>
@@ -2483,7 +2497,7 @@ function FiveSAuditExecution({
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                                            className="size-11 shrink-0 text-muted-foreground hover:text-destructive md:size-7"
                                             aria-label={`Remove ${evidence.name}`}
                                             title="Remove attachment"
                                             onClick={() =>
@@ -2518,17 +2532,17 @@ function FiveSAuditExecution({
         </div>
       </div>
 
-      {fullScreen && activeSection && (
-        <footer className="mobile-safe-bottom sticky bottom-0 z-40 flex shrink-0 items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 shadow-[0_-10px_30px_-24px_rgb(15_23_42/0.5)] backdrop-blur md:px-8">
-          <Button type="button" variant="outline" disabled={activeSectionIndex === 0 && activeQuestionIndex === 0} onClick={() => navigateQuestion(-1)}>Previous</Button>
+      {activeSection && (
+        <footer className={`mobile-safe-bottom sticky bottom-0 z-40 shrink-0 items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 shadow-[0_-10px_30px_-24px_rgb(15_23_42/0.5)] backdrop-blur md:px-8 ${fullScreen ? "flex" : "flex md:hidden"}`}>
+          <Button type="button" variant="outline" className="min-h-11 md:min-h-9" disabled={activeSectionIndex === 0 && activeQuestionIndex === 0} onClick={() => navigateQuestion(-1)}>Previous</Button>
           <p className="hidden text-xs text-muted-foreground sm:block">{auditSectionName(language, activeSection.category)} · Question {activeQuestionIndex + 1} of {activeSection.questions.length}</p>
           {isFinalQuestion ? (
-            <Button type="button" disabled={!auditReadyForCompletion || !isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={requestAuditCompletion}>
+            <Button type="button" className="min-h-11 md:min-h-9" disabled={!auditReadyForCompletion || !isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={requestAuditCompletion}>
               <CheckCircle2 className="size-4" />
               Submit Audit
             </Button>
           ) : (
-            <Button type="button" disabled={!isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={() => navigateQuestion(1)}>Save &amp; Next <span aria-hidden="true">→</span></Button>
+            <Button type="button" className="min-h-11 md:min-h-9" disabled={!isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={() => navigateQuestion(1)}>Save &amp; Next <span aria-hidden="true">→</span></Button>
           )}
         </footer>
       )}
@@ -2714,7 +2728,7 @@ function FiveSAuditExecution({
 
       <FinalAuditVerificationDialog
         open={showCompleteConfirmation}
-        questionCount={allQuestions.length}
+        auditId={audit.id}
         auditor={audit.auditor}
         onOpenChange={setShowCompleteConfirmation}
         onComplete={handleCompleteAudit}
@@ -2826,8 +2840,10 @@ function ActionDialog({
             type="button"
             variant="ghost"
             size="icon"
+            className="size-11 md:size-9"
             onClick={onClose}
             disabled={saving}
+            aria-label="Close action editor"
           >
             <X className="size-4" />
           </Button>
@@ -2889,7 +2905,7 @@ function ActionDialog({
                 <label className="text-xs font-medium" htmlFor={`proposed-action-${question.id}`}>
                   Proposed Action <span className="text-destructive">*</span>
                 </label>
-                <span className="text-[10px] tabular-nums text-muted-foreground">{state.proposedAction.length} / 500</span>
+                <span className="text-xs tabular-nums text-muted-foreground md:text-[10px]">{state.proposedAction.length} / 500</span>
               </div>
               <Textarea
                 id={`proposed-action-${question.id}`}
@@ -2901,7 +2917,7 @@ function ActionDialog({
                 className="mt-1.5 min-h-24"
                 disabled={!canEditCreatedAction}
               />
-              <p className="mt-1.5 text-[11px] text-muted-foreground">Recommend the corrective action required for this finding.</p>
+              <p className="mt-1.5 text-xs text-muted-foreground md:text-[11px]">Recommend the corrective action required for this finding.</p>
             </div>
 
             <div className={`rounded-lg border p-4 ${requiresAction && state.evidence.length === 0 ? "border-destructive/45 bg-destructive/[0.035]" : "bg-muted/10"}`}>
@@ -2911,16 +2927,16 @@ function ActionDialog({
                     <FileText className="size-4 text-muted-foreground" />
                     <p className="text-xs font-medium">{t("action.originalEvidence")} {requiresAction ? <span className="text-destructive">*</span> : <span className="font-normal text-muted-foreground">({t("common.optional")})</span>}</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{t("action.evidenceHelp")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground md:text-[11px]">{t("action.evidenceHelp")}</p>
                 </div>
                 {canEditCreatedAction && <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                   <input ref={evidenceInputRef} type="file" accept="image/*,.pdf,.doc,.docx" className="hidden" onChange={onEvidenceUpload} />
                   <input ref={evidenceCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onEvidenceUpload} />
-                  <Button type="button" size="sm" variant="outline" className="order-2 flex-1 sm:order-1 sm:flex-none" onClick={() => evidenceInputRef.current?.click()}><Upload className="mr-1.5 size-3.5" /> {t("common.upload")}</Button>
-                  <Button type="button" size="sm" variant="outline" className="order-1 flex-1 sm:order-2 sm:flex-none" onClick={() => evidenceCameraRef.current?.click()}><Camera className="mr-1.5 size-3.5" /> {t("common.camera")}</Button>
+                  <Button type="button" size="sm" variant="outline" className="order-2 min-h-11 flex-1 sm:order-1 sm:flex-none md:min-h-8" onClick={() => evidenceInputRef.current?.click()}><Upload className="mr-1.5 size-3.5" /> {t("common.upload")}</Button>
+                  <Button type="button" size="sm" variant="outline" className="order-1 min-h-11 flex-1 sm:order-2 sm:flex-none md:min-h-8" onClick={() => evidenceCameraRef.current?.click()}><Camera className="mr-1.5 size-3.5" /> {t("common.camera")}</Button>
                 </div>}
               </div>
-              {state.evidence.length > 0 ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{state.evidence.map((evidence) => <div key={evidence.id} className="flex min-w-0 items-center gap-2 rounded-lg border bg-background p-2"><button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onEvidencePreview(evidence)}>{evidence.type === "image" ? <img src={evidence.dataUrl} alt="" className="size-11 shrink-0 rounded object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded bg-muted"><FileText className="size-5" /></span>}<span className="min-w-0"><span className="block truncate text-xs font-medium">{evidence.name}</span><span className="text-[10px] text-muted-foreground">{getEvidenceFileLabel(evidence)} · {formatEvidenceSize(evidence.size)}</span></span></button>{canEditCreatedAction && <Button type="button" size="icon-sm" variant="ghost" onClick={() => onEvidenceRemove(evidence.id)} aria-label={`Remove ${evidence.name}`}><Trash2 className="size-3.5" /></Button>}</div>)}</div> : requiresAction && <p className="mt-3 text-[11px] font-medium text-destructive">At least one evidence attachment is required for Non Compliance or Partial Compliance.</p>}
+              {state.evidence.length > 0 ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{state.evidence.map((evidence) => <div key={evidence.id} className="flex min-w-0 items-center gap-2 rounded-lg border bg-background p-2"><button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onEvidencePreview(evidence)}>{evidence.type === "image" ? <img src={evidence.dataUrl} alt="" className="size-11 shrink-0 rounded object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded bg-muted"><FileText className="size-5" /></span>}<span className="min-w-0"><span className="block truncate text-xs font-medium">{evidence.name}</span><span className="text-xs text-muted-foreground md:text-[10px]">{getEvidenceFileLabel(evidence)} · {formatEvidenceSize(evidence.size)}</span></span></button>{canEditCreatedAction && <Button type="button" size="icon-sm" className="size-11 md:size-8" variant="ghost" onClick={() => onEvidenceRemove(evidence.id)} aria-label={`Remove ${evidence.name}`}><Trash2 className="size-3.5" /></Button>}</div>)}</div> : requiresAction && <p className="mt-3 text-xs font-medium text-destructive md:text-[11px]">At least one evidence attachment is required for Non-Compliance or Partial Compliance.</p>}
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">

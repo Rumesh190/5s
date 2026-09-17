@@ -5,6 +5,7 @@ import * as React from "react";
 import { Header } from "@/components/navigation/header";
 import { ProductNav } from "@/components/navigation/product-nav";
 import { Sidebar } from "@/components/navigation/sidebar";
+import { useUiPreferences } from "@/components/preferences/ui-preferences-provider";
 
 /**
  * Standalone 5S application shell: desktop product navigation, compact mobile
@@ -15,7 +16,7 @@ function AppShell({
 }: {
   children: React.ReactNode;
 }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const { sidebarCollapsed, setSidebarCollapsed } = useUiPreferences();
 
   React.useEffect(() => {
     document.documentElement.dataset.sidebar = sidebarCollapsed
@@ -28,7 +29,7 @@ function AppShell({
       <ProductNav />
       <Sidebar
         collapsed={sidebarCollapsed}
-        onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+        onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
       <div className="app-workspace-shell flex min-h-screen flex-col">

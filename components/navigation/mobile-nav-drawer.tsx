@@ -32,7 +32,7 @@ function MobileNavDrawer() {
       >
         <Menu className="size-5" />
       </SheetTrigger>
-      <SheetContent side="right" className="w-[min(100vw,380px)] max-w-none border-sidebar-border bg-sidebar p-0 text-sidebar-foreground">
+      <SheetContent side="right" className="w-[min(100vw,380px)] max-w-none border-sidebar-border bg-sidebar p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] text-sidebar-foreground">
         <SheetHeader className="h-14 border-b border-sidebar-border px-4 py-0">
           <SheetTitle>
             <Link

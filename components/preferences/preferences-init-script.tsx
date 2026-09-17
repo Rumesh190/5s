@@ -10,15 +10,18 @@ const initScript = `
     var accent = accents.indexOf(stored.accentColor) >= 0 ? stored.accentColor : defaults.accentColor;
     var languages = ["en", "hi", "ta", "bn", "ja"];
     var language = languages.indexOf(stored.language) >= 0 ? stored.language : defaults.language;
+    var sidebarCollapsed = stored.sidebarCollapsed === true;
     document.documentElement.dataset.navigation = navigation;
     document.documentElement.dataset.accent = accent;
     document.documentElement.dataset.language = language;
     document.documentElement.lang = language;
+    document.documentElement.dataset.sidebar = sidebarCollapsed ? "collapsed" : "expanded";
   } catch (_) {
     document.documentElement.dataset.navigation = "top";
     document.documentElement.dataset.accent = "indigo";
     document.documentElement.dataset.language = "en";
     document.documentElement.lang = "en";
+    document.documentElement.dataset.sidebar = "expanded";
   }
 })();`
 
