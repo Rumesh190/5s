@@ -1,6 +1,6 @@
 "use client";
 import { useSyncExternalStore } from "react";
-import { safeSetStorage } from "@/lib/browser-storage";
+import { readStorageJson, safeSetStorage } from "@/lib/browser-storage";
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { DEMO_USERS } from "@/lib/current-user";
 import { hasPermission, permissionsForRoles } from "./permissions";
@@ -10,7 +10,7 @@ const KEY="five-s-administration-users-v1",STAMP="2026-09-02T00:00:00.000Z";
 function email(name:string){return `${name.toLowerCase().replace(/[^a-z0-9]+/g,".").replace(/^\.|\.$/g,"")}@egmore.example`}
 function seeds():AdminUser[]{const map=new Map<string,AdminUser>();const add=(id:string,name:string,roles:AdminRole[],zone:string,responsibility:"Leader"|"Member")=>map.set(id,{id,employeeId:id.replace("USR-","EMP-"),name,email:email(name),plant:"Egmore Plant",status:"Active",roles,zoneMemberships:[{zone,responsibility}],permissions:permissionsForRoles(roles),updatedAt:STAMP});for(const zone of FIVE_S_ZONE_CONFIGURATION){add(zone.leaderId,zone.leader,zone.leaderId===DEMO_USERS.auditor.id?["Admin","Auditor","Zone Leader"]:["Zone Leader"],zone.name,"Leader");for(const member of zone.members)add(member.id,member.name,["Zone Member"],zone.name,"Member")}return [...map.values()]}
 export const ADMIN_USER_SEEDS=seeds(); let users=ADMIN_USER_SEEDS,loaded=false;const listeners=new Set<()=>void>();
-function load(){if(loaded||typeof window==="undefined")return;loaded=true;try{const saved=window.localStorage.getItem(KEY);if(saved){const parsed=JSON.parse(saved);if(Array.isArray(parsed))users=parsed}}catch{}}
+function load(){if(loaded||typeof window==="undefined")return;loaded=true;const saved=readStorageJson<AdminUser[]>(KEY);if(Array.isArray(saved))users=saved}
 function emit(){if(typeof window==="undefined")return false;const result=safeSetStorage(KEY,users);if(!result.success)return false;listeners.forEach(listener=>listener());return true}
 function subscribe(listener:()=>void){load();listeners.add(listener);return()=>listeners.delete(listener)}function snapshot(){load();return users}
 export function useAdminUsers(){return useSyncExternalStore(subscribe,snapshot,()=>ADMIN_USER_SEEDS)}

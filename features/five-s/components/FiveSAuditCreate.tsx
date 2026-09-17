@@ -106,11 +106,10 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
   const currentUser = useCurrentUser();
   const createdAt = useMemo(() => new Date(), []);
   const today = useMemo(() => toLocalInputDate(createdAt), [createdAt]);
-  const defaultDueDate = useMemo(() => {
-    const date = new Date(createdAt);
-    date.setDate(date.getDate() + 2);
-    return toLocalInputDate(date);
-  }, [createdAt]);
+  const defaultDueDate = useMemo(
+    () => toLocalInputDate(createdAt),
+    [createdAt]
+  );
 
   const [zone, setZone] = useState<string>("");
   const [dueDate, setDueDate] = useState(defaultDueDate);
@@ -239,7 +238,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
                     <SummaryItem label={t("audit.zoneLeader")} value={selectedZone?.leader || t("common.pending")} />
                     <SummaryItem label={t("audit.auditor")} value={currentUser.name} />
                     <SummaryItem label={t("common.created")} value={`${createdDate} · ${createdTime}`} />
-                    <SummaryItem label={t("audit.schedule")} value={`${t("audit.due")} ${formatDate(dueDate, locale)}`} />
+                    <SummaryItem label={t("audit.dueDate")} value={formatDate(dueDate, locale)} />
                   </div>
                 </div>
               </section>

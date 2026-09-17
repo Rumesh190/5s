@@ -16,11 +16,6 @@ export type FiveSQuestionStatus =
   | "Fail"
   | "NA";
 
-export type FiveSActionStatus =
-  | "Open"
-  | "In Progress"
-  | "Completed"
-  | "Overdue";
 
 /* =========================================================
    EVIDENCE
@@ -43,6 +38,12 @@ export interface FiveSEvidence {
   uploadedBy: string;
 }
 
+export interface FiveSQuestionReference {
+  image: string;
+  title: string;
+  description: string;
+}
+
 /* =========================================================
    QUESTION
    ========================================================= */
@@ -63,6 +64,8 @@ export interface FiveSQuestion {
   referenceGuidanceKey?: string;
 
   referenceAltKey?: string;
+
+  reference?: FiveSQuestionReference;
 
   maxScore: number;
 
@@ -124,6 +127,23 @@ export interface FiveSAudit {
 
   completedAt?: string;
 
+  completedByUserId?: string;
+  completedByName?: string;
+
+  auditorVerification?: {
+    auditorId: string;
+    auditorName: string;
+    capturedAt: string;
+    /** Frontend MVP data URL; replaceable with an object-storage URL/key. */
+    photo: string;
+    /** Frontend MVP data URL; replaceable with an object-storage URL/key. */
+    signature: string;
+    photoUrl?: string;
+    photoObjectStorageKey?: string;
+    signatureUrl?: string;
+    signatureObjectStorageKey?: string;
+  };
+
   auditorSignature?: {
     userId: string;
     userName: string;
@@ -134,46 +154,4 @@ export interface FiveSAudit {
   dueDate: string;
 
   sections: FiveSSection[];
-}
-
-/* =========================================================
-   ACTION
-   ========================================================= */
-
-export interface FiveSAction {
-  id: string;
-
-  auditId: string;
-
-  auditTitle: string;
-
-  title: string;
-
-  description: string;
-
-  category: FiveSCategory;
-
-  plant: string;
-
-  department: string;
-
-  area: string;
-
-  assignedTo: string;
-
-  status: FiveSActionStatus;
-
-  priority:
-    | "Low"
-    | "Medium"
-    | "High"
-    | "Critical";
-
-  dueDate: string;
-
-  createdAt: string;
-
-  completedAt?: string;
-
-  evidence?: FiveSEvidence[];
 }

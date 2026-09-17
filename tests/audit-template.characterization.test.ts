@@ -1,7 +1,11 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { GARMENT_REFERENCE_CONTENT, referenceFields } from "@/lib/five-s/reference-guides";
+import { didRequiredAnswersBecomeComplete } from "@/lib/five-s/audit-completion";
+import { stopCameraStream, verificationIsComplete } from "@/lib/five-s/audit-verification";
+import type { FiveSCategory } from "@/features/five-s/types/five-s";
 
 const source = readFileSync(resolve("features/five-s/audit-list-page.tsx"), "utf8");
 const templateSource = source.match(
@@ -114,5 +118,81 @@ describe("active audit-list 5S template", () => {
   it("characterizes the live two-point maximum without treating fixtures as canonical", () => {
     expect(39 * 2).toBe(78);
     expect(source).toContain("maxScore: 2");
+  });
+
+  it("maps all 39 questions to one unique garment good-practice reference asset", () => {
+    const categories: Array<[FiveSCategory, number]> = [
+      ["Sort", 7],
+      ["Set in Order", 9],
+      ["Shine", 8],
+      ["Standardize", 7],
+      ["Sustain", 8],
+    ];
+    const references = categories.flatMap(([category, count]) =>
+      Array.from({ length: count }, (_, index) => referenceFields(category, index).reference),
+    );
+
+    expect(GARMENT_REFERENCE_CONTENT).toHaveLength(39);
+    expect(references).toHaveLength(39);
+    expect(references.map((reference) => reference?.image)).toEqual(
+      Array.from({ length: 39 }, (_, index) => `/5s/references/garment/q${String(index + 1).padStart(2, "0")}.webp`),
+    );
+    expect(references.every((reference) => reference?.title && reference.description)).toBe(true);
+    expect(references.every((reference) => existsSync(resolve("public", reference?.image.replace(/^\//, "") ?? "")))).toBe(true);
+    expect(references.every((reference) => Object.keys(reference ?? {}).sort().join(",") === "description,image,title")).toBe(true);
+  });
+});
+
+describe("audit review auto-navigation transition", () => {
+  const questionIds = ["q1", "q2", "q3"];
+
+  it("opens review only when the final missing required answer becomes complete", () => {
+    expect(didRequiredAnswersBecomeComplete(questionIds, { q1: true, q2: true, q3: false }, { q1: true, q2: true, q3: true })).toBe(true);
+    expect(didRequiredAnswersBecomeComplete(questionIds, { q1: false, q2: true, q3: false }, { q1: false, q2: true, q3: true })).toBe(false);
+  });
+
+  it("does not redirect on initial load or while editing an already complete questionnaire", () => {
+    const complete = { q1: true, q2: true, q3: true };
+    expect(didRequiredAnswersBecomeComplete(questionIds, null, complete)).toBe(false);
+    expect(didRequiredAnswersBecomeComplete(questionIds, complete, complete)).toBe(false);
+  });
+
+  it("can trigger again after the questionnaire becomes incomplete", () => {
+    expect(didRequiredAnswersBecomeComplete(questionIds, { q1: true, q2: false, q3: true }, { q1: true, q2: true, q3: true })).toBe(true);
+  });
+});
+
+describe("final auditor verification", () => {
+  it("requires both a live photo and a real signature", () => {
+    expect(verificationIsComplete(null, null)).toBe(false);
+    expect(verificationIsComplete("photo-data", null)).toBe(false);
+    expect(verificationIsComplete(null, "signature-data")).toBe(false);
+    expect(verificationIsComplete("photo-data", "signature-data")).toBe(true);
+  });
+
+  it("stops every camera track", () => {
+    const stops = [vi.fn(), vi.fn()];
+    stopCameraStream({ getTracks: () => stops.map((stop) => ({ stop })) } as unknown as MediaStream);
+    expect(stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("keeps live capture, persistence, and report evidence wired to the audit", () => {
+    const verification = readFileSync(resolve("features/five-s/components/FinalAuditVerificationDialog.tsx"), "utf8");
+    const execution = readFileSync(resolve("features/five-s/components/FiveSAuditExecution.tsx"), "utf8");
+    const report = readFileSync(resolve("features/five-s/components/FiveSAuditReport.tsx"), "utf8");
+    expect(verification).toContain("navigator.mediaDevices.getUserMedia");
+    expect(verification).toContain('facingMode: "user"');
+    expect(verification).toContain("context.drawImage(video");
+    expect(execution).toContain("auditorVerification,");
+    expect(report).toContain("audit.auditorVerification.photo");
+    expect(report).toContain("audit.auditorVerification?.signature");
+  });
+
+  it("keeps one completion action in a fixed modal footer while only the body scrolls", () => {
+    const verification = readFileSync(resolve("features/five-s/components/FinalAuditVerificationDialog.tsx"), "utf8");
+    expect(verification).toContain("flex max-h-[calc(100dvh-1.5rem)] flex-col");
+    expect(verification).toContain("min-h-0 flex-1 overflow-y-auto");
+    expect(verification).toContain('className="z-10 shrink-0 border-t bg-popover');
+    expect(verification.match(/Complete Audit/g)).toHaveLength(2); // Dialog title and the single canonical CTA.
   });
 });

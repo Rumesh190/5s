@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Standalone 5S
 
-## Getting Started
+A demo-ready frontend MVP for garment-manufacturing 5S audits, corrective actions, Red Tags, continuous improvements, dashboards, evidence, and branded reports.
 
-First, run the development server:
+The application currently uses browser persistence and demo identities. No production backend, database, object storage, or identity provider is connected yet.
+
+## Local setup
+
+Requirements: Node.js 20+ and npm.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). The demo login is `admin` / `admin`; the user menu provides demo-role switching for workflow walkthroughs.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Quality checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+```
 
-## Learn More
+Production preview:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm start
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## MVP and backend status
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Frontend workflows are functional and use centralized feature stores backed by `localStorage`. Evidence and signatures are browser data URLs. Browser role checks are demonstration-only and must become server authorization during backend integration.
 
-## Deploy on Vercel
+For architecture, canonical data sources, business rules, lifecycle ownership, demo reset, backend boundaries, and AI guidance, read [AGENTS.md](./AGENTS.md) before changing code.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Additional backend handover material is under [`docs/`](./docs/).

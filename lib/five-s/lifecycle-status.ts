@@ -16,8 +16,11 @@ export function getAuditLifecycleStage(audit: FiveSAudit): AuditLifecycleStage {
 
 export function getActionLifecycleStage(status: MyActionStatus): ActionLifecycleStage {
   if (status === "Completed") return "Closed";
-  if (["Pending Review", "Awaiting Review"].includes(status)) return "Under Review";
-  if (status === "Pending Auditor Review") return "Submitted for Review";
+  if (status === "Awaiting Review") return "Under Review";
   if (["In Progress", "Overdue", "Rework Required"].includes(status)) return "In Progress";
   return "Assigned";
+}
+
+export function getActionStatusLabel(status: MyActionStatus) {
+  return status;
 }

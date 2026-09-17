@@ -99,26 +99,21 @@ Enforce same-zone team selection, zone-member creation, zone-leader review, appr
 
 ## Red Tag
 
-Current required operations:
-
 ```text
 listRedTags(filters, pagination)
 getRedTag(redTagId)
 createRedTag(input)
 markRedTagPrinted(redTagId)
+assignRedTagAction(redTagId, input, version)
+startRedTagAction(redTagId, version)
+saveRedTagClosureEvidence(redTagId, input, version)
+submitRedTagForReview(redTagId, input, version)
+returnRedTagForRework(redTagId, remark, version)
+approveAndCloseRedTag(redTagId, version)
 getRedTagPrintData(redTagId)
 ```
 
-The backend must generate Red Tag numbers atomically and prevent duplicate printed events. Do not add start/resolve/close APIs until the Red Tag lifecycle is approved.
-
-Potential future operations requiring product decisions:
-
-```text
-startRedTag(redTagId)
-resolveRedTag(redTagId)
-closeRedTag(redTagId)
-reopenRedTag(redTagId)
-```
+The backend must generate Red Tag numbers atomically, prevent duplicate printed events, enforce Zone Leader review/closure, preserve submission history, and maintain a unique canonical Action link by source metadata.
 
 ## Notifications
 

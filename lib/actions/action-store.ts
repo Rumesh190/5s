@@ -13,7 +13,7 @@ import type {
 } from "@/features/five-s/types/my-actions";
 import { createNotification } from "@/lib/notifications/notification-store";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
-import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
+import { readStorageJson, readStorageString, removeStorage, safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 export interface ActionActor {
   id: string;
@@ -55,10 +55,7 @@ function loadFromStorage() {
   hasLoadedFromStorage = true;
 
   try {
-    const stored =
-      window.localStorage.getItem(
-        STORAGE_KEY
-      );
+    const stored = readStorageJson<MyAction[]>(STORAGE_KEY);
 
     if (!stored) {
       actions = MY_ACTIONS.map(normalizeEvidence);
@@ -68,12 +65,9 @@ function loadFromStorage() {
       return;
     }
 
-    const parsed =
-      JSON.parse(stored);
-
-    if (Array.isArray(parsed)) {
-      let storedActions = parsed as MyAction[];
-      const fixtureVersion = window.localStorage.getItem(DEMO_FIXTURE_VERSION_KEY);
+    if (Array.isArray(stored)) {
+      let storedActions = stored;
+      const fixtureVersion = readStorageString(DEMO_FIXTURE_VERSION_KEY);
       if (fixtureVersion !== DEMO_FIXTURE_VERSION) {
         const canonicalDemo = MY_ACTIONS.find((action) => action.id === "ACT-ZA-001");
         if (canonicalDemo) {
@@ -107,8 +101,12 @@ function saveToStorage() {
 
 /** Preserve legacy arrays while making evidence purpose explicit. */
 function normalizeEvidence(action: MyAction): MyAction {
+  const zone = getFiveSZoneConfiguration(action.area);
   return {
     ...action,
+    status: normalizeLegacyActionStatus(action.status as string),
+    zoneLeaderId: action.zoneLeaderId ?? zone?.leaderId,
+    zoneLeaderName: action.zoneLeaderName ?? zone?.leader,
     issueEvidence: (action.issueEvidence ?? []).map((evidence) => ({
       ...evidence,
       actionId: evidence.actionId ?? action.id,
@@ -120,6 +118,13 @@ function normalizeEvidence(action: MyAction): MyAction {
       evidenceType: "resolution",
     })),
   };
+}
+
+/** Translate historical browser records without mutating storage eagerly. */
+export function normalizeLegacyActionStatus(status: string): MyActionStatus {
+  return status === "Pending Review" || status === "Pending Auditor Review"
+    ? "Awaiting Review"
+    : status as MyActionStatus;
 }
 
 /* =========================================================
@@ -219,12 +224,16 @@ export function createAction(
     })),
     evidence: [],
 
-    activityHistory: input.activityHistory ?? [
-      createActivity("created", {
+    activityHistory: input.activityHistory ?? (() => {
+      const auditor = {
         id: input.createdByUserId ?? input.auditor ?? "legacy-auditor",
         name: input.createdByName ?? input.auditor ?? "Auditor",
-      }),
-    ],
+      };
+      return [
+        createActivity("created", auditor, undefined, "Auditor"),
+        createActivity("proposed", auditor, input.proposedAction, "Auditor"),
+      ];
+    })(),
   };
 
   actions = [
@@ -248,13 +257,33 @@ export function createAction(
   return action;
 }
 
-export function assignActionToZoneMember(actionId: string, actor: ActionActor, memberId: string) {
+export function assignActionToZoneMember(
+  actionId: string,
+  actor: ActionActor,
+  input: { memberId: string; actionPlan: string }
+) {
   const action = getActionById(actionId);
   const zone = action ? getFiveSZoneConfiguration(action.area) : undefined;
-  const member = zone?.members.find((item) => item.id === memberId);
-  if (!action || action.status !== "Awaiting Assignment" || !zone || zone.leaderId !== actor.id || !member) return undefined;
+  const member = zone?.members.find((item) => item.id === input.memberId);
+  const actionPlan = input.actionPlan.trim();
+  if (!action || action.status !== "Awaiting Assignment" || !zone || zone.leaderId !== actor.id || !member || !actionPlan) return undefined;
   const assignedAt = new Date().toISOString();
-  const updated = updateAction(actionId, { status: "Assigned", assignedTo: member.name, responsiblePersonId: member.id, responsiblePersonName: member.name, assignedByUserId: actor.id, assignedByName: actor.name, assignedAt, activityHistory: appendActivity(action, createActivity("assigned", actor, `Assigned to ${member.name}`)) });
+  const originalPlan = (action.proposedAction ?? action.actionPlan ?? action.description).trim();
+  const planWasEdited = actionPlan !== originalPlan;
+  const updated = updateAction(actionId, {
+    status: "Assigned",
+    assignedTo: member.name,
+    responsiblePersonId: member.id,
+    responsiblePersonName: member.name,
+    assignedByUserId: actor.id,
+    assignedByName: actor.name,
+    assignedAt,
+    actionPlan,
+    actionPlanEditedByUserId: planWasEdited ? actor.id : undefined,
+    actionPlanEditedByName: planWasEdited ? actor.name : undefined,
+    actionPlanEditedAt: planWasEdited ? assignedAt : undefined,
+    activityHistory: appendActivity(action, createActivity("assigned", actor, `Assigned to ${member.name}`, "Zone Leader")),
+  });
   if (updated) createNotification({ recipientUserId: member.id, title: "New Action Assigned", message: `${action.title} · Assigned by: ${actor.name} · Raised by: ${action.createdByName ?? action.auditor ?? "Auditor"} · Zone: ${action.area} · Priority: ${action.priority} · Due: ${action.dueDate}`, href: `/5s/actions/${encodeURIComponent(action.id)}` });
   return updated;
 }
@@ -262,13 +291,15 @@ export function assignActionToZoneMember(actionId: string, actor: ActionActor, m
 function createActivity(
   type: MyActionActivity["type"],
   actor: ActionActor,
-  remark?: string
+  remark?: string,
+  actorRole?: MyActionActivity["actorRole"]
 ): MyActionActivity {
   return {
     id: `ACTIVITY-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     type,
     actorId: actor.id,
     actorName: actor.name,
+    actorRole,
     createdAt: new Date().toISOString(),
     remark,
   };
@@ -278,20 +309,17 @@ function responsibleId(action: MyAction) {
   return action.responsiblePersonId ?? action.assignedTo;
 }
 
-function creatorId(action: MyAction) {
-  return action.createdByUserId ?? action.auditor;
-}
-
 function isResponsible(action: MyAction, actor: ActionActor) {
   return action.responsiblePersonId
     ? action.responsiblePersonId === actor.id
     : action.assignedTo === actor.name;
 }
 
-function isCreator(action: MyAction, actor: ActionActor) {
-  return action.createdByUserId
-    ? action.createdByUserId === actor.id
-    : !action.auditor || action.auditor === actor.name;
+function isZoneLeader(action: MyAction, actor: ActionActor) {
+  const zone = getFiveSZoneConfiguration(action.area);
+  if (zone) return zone.leaderId === actor.id;
+  if (action.zoneLeaderId) return action.zoneLeaderId === actor.id;
+  return Boolean(action.zoneLeaderName && action.zoneLeaderName === actor.name);
 }
 
 function appendActivity(action: MyAction, activity: MyActionActivity) {
@@ -303,7 +331,7 @@ export function startAssignedAction(actionId: string, actor: ActionActor) {
   if (!action || !isResponsible(action, actor) || !["Assigned", "Open", "Rework Required"].includes(action.status)) return undefined;
   return updateAction(actionId, {
     status: "In Progress",
-    activityHistory: appendActivity(action, createActivity("started", actor)),
+    activityHistory: appendActivity(action, createActivity("started", actor, undefined, "Zone Member")),
   });
 }
 
@@ -317,8 +345,15 @@ export function submitActionForReview(
   if (!resolution.observation.trim() || !resolution.correctiveActionCategory || action.evidence.length === 0 || !Number.isFinite(resolution.costSaving) || resolution.costSaving < 0) return undefined;
   const isResubmission = action.status === "Rework Required" || (action.reviewHistory?.length ?? 0) > 0;
   const now = new Date().toISOString();
+  const zone = getFiveSZoneConfiguration(action.area);
+  const zoneLeader = {
+    id: zone?.leaderId ?? action.zoneLeaderId ?? "zone-leader",
+    name: zone?.leader ?? action.zoneLeaderName ?? "Zone Leader",
+  };
+  const submittedActivity = createActivity(isResubmission ? "resubmitted" : "submitted", actor, undefined, "Zone Member");
+  const reviewRequestedActivity = createActivity("review_requested", zoneLeader, undefined, "Zone Leader");
   const updated = updateAction(actionId, {
-    status: "Pending Auditor Review",
+    status: "Awaiting Review",
     actionTakenDescription: resolution.observation.trim(),
     resolutionObservation: resolution.observation.trim(),
     correctiveActionCategory: resolution.correctiveActionCategory,
@@ -326,10 +361,11 @@ export function submitActionForReview(
     currency: action.currency ?? "INR",
     submittedForReviewAt: now,
     completedAt: undefined,
-    activityHistory: appendActivity(action, createActivity(isResubmission ? "resubmitted" : "submitted", actor)),
+    activityHistory: [...(action.activityHistory ?? []), submittedActivity, reviewRequestedActivity],
   });
-  if (updated && creatorId(action)) createNotification({
-    recipientUserId: creatorId(action)!,
+  const zoneLeaderId = zoneLeader.id === "zone-leader" ? undefined : zoneLeader.id;
+  if (updated && zoneLeaderId) createNotification({
+    recipientUserId: zoneLeaderId,
     title: isResubmission ? "Action resubmitted for review" : "Action submitted for review",
     message: `${action.title} · Submitted by: ${actor.name} · Audit: ${action.sourceTitle} · Zone: ${action.area}`,
     href: `/5s/actions/${encodeURIComponent(action.id)}?mode=review`,
@@ -339,19 +375,21 @@ export function submitActionForReview(
 
 export function sendActionBack(actionId: string, actor: ActionActor, remark: string) {
   const action = getActionById(actionId);
-  if (!action || !isCreator(action, actor) || !["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status) || !remark.trim()) return undefined;
-  const review = createActivity("sent_back", actor, remark.trim());
+  if (!action || !isZoneLeader(action, actor) || action.status !== "Awaiting Review" || !remark.trim()) return undefined;
+  const review = createActivity("sent_back", actor, remark.trim(), "Zone Leader");
   const updated = updateAction(actionId, {
     status: "Rework Required",
     reviewedAt: undefined,
     reviewedBy: undefined,
+    reviewedByRole: undefined,
+    reviewComment: remark.trim(),
     completedAt: undefined,
     reviewHistory: [...(action.reviewHistory ?? []), review],
     activityHistory: appendActivity(action, review),
   });
   if (updated) createNotification({
     recipientUserId: responsibleId(action),
-    title: "Action sent back for rework",
+    title: "Action returned for rework",
     message: `${action.title} · Reviewer: ${actor.name} · ${remark.trim()}`,
     href: `/5s/actions/${encodeURIComponent(action.id)}`,
   });
@@ -360,14 +398,18 @@ export function sendActionBack(actionId: string, actor: ActionActor, remark: str
 
 export function closeReviewedAction(actionId: string, actor: ActionActor) {
   const action = getActionById(actionId);
-  if (!action || !isCreator(action, actor) || !["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status)) return undefined;
+  if (!action || !isZoneLeader(action, actor) || action.status !== "Awaiting Review") return undefined;
   const now = new Date().toISOString();
-  const reviewedActivity = createActivity("reviewed", actor);
-  const closedActivity = createActivity("closed", actor);
+  const reviewedActivity = createActivity("reviewed", actor, undefined, "Zone Leader");
+  const closedActivity = createActivity("closed", actor, undefined, "Zone Leader");
   const updated = updateAction(actionId, {
     status: "Completed",
     reviewedBy: actor.name,
+    reviewedByRole: "Zone Leader",
     reviewedAt: now,
+    closedBy: actor.name,
+    closedByRole: "Zone Leader",
+    closedAt: now,
     completedAt: now,
     completedByUserId: action.responsiblePersonId,
     completedByName: action.responsiblePersonName ?? action.assignedTo,
@@ -506,9 +548,7 @@ export function removeActionEvidence(
 export function setActions(
   nextActions: MyAction[]
 ) {
-  actions = [
-    ...nextActions,
-  ];
+  actions = nextActions.map(normalizeEvidence);
 
   emitChange();
 }
@@ -532,9 +572,7 @@ export function clearSavedActions() {
     typeof window !==
     "undefined"
   ) {
-    window.localStorage.removeItem(
-      STORAGE_KEY
-    );
+    removeStorage(STORAGE_KEY);
   }
 
   hasLoadedFromStorage =

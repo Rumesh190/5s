@@ -19,7 +19,6 @@ import {
   Play,
   RotateCcw,
   Send,
-  Upload,
   X,
 } from "lucide-react";
 
@@ -45,6 +44,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import FiveSPageHeader from "@/features/five-s/components/FiveSPageHeader";
+import AfterPhotoCaptureDialog from "@/features/five-s/components/AfterPhotoCaptureDialog";
 import type { MyAction, MyActionActivity, MyActionEvidence } from "@/features/five-s/types/my-actions";
 import {
   addActionEvidence,
@@ -58,18 +58,17 @@ import {
   useActionStore,
 } from "@/lib/actions/action-store";
 import { FIVE_S_CORRECTIVE_ACTION_CATEGORIES, getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
+import { getActionStatusLabel } from "@/lib/five-s/lifecycle-status";
 import { useCurrentUser } from "@/lib/current-user";
-import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage } from "@/lib/evidence-images";
+import { MAX_EVIDENCE_IMAGES } from "@/lib/evidence-images";
 
 const STATUS_VARIANTS = {
   Assigned: "info",
   Open: "info",
   "In Progress": "warning",
   Overdue: "danger",
-  "Pending Review": "info",
   "Awaiting Review": "info",
   "Awaiting Assignment": "warning",
-  "Pending Auditor Review": "info",
   "Rework Required": "danger",
   Completed: "success",
 } as const;
@@ -83,11 +82,13 @@ const PRIORITY_VARIANTS = {
 
 const ACTIVITY_LABELS: Record<MyActionActivity["type"], string> = {
   created: "Action created",
+  proposed: "Proposed action submitted",
   awaiting_assignment: "Awaiting Zone Leader assignment",
   assigned: "Action assigned",
   started: "Work started",
   submitted: "Submitted for review",
   resubmitted: "Resubmitted for review",
+  review_requested: "Awaiting Zone Leader Review",
   reviewed: "Reviewed",
   sent_back: "Sent back for rework",
   closed: "Action closed",
@@ -109,10 +110,10 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   const [closeOpen, setCloseOpen] = useState(false);
   const [remark, setRemark] = useState("");
   const [assigneeId, setAssigneeId] = useState("");
+  const [assignmentPlan, setAssignmentPlan] = useState("");
   const [preview, setPreview] = useState<MyActionEvidence | null>(null);
+  const [afterCameraOpen, setAfterCameraOpen] = useState(false);
   const [pendingTransition, setPendingTransition] = useState<"start" | "submit" | "send-back" | "close" | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
       setObservation(action.resolutionObservation ?? action.actionTakenDescription ?? "");
       setCategory(action.correctiveActionCategory ?? "");
       setCostSaving(String(action.costSaving ?? 0));
+      setAssignmentPlan(action.actionPlan ?? action.proposedAction ?? action.description);
     });
     return () => { cancelled = true; };
   }, [action]);
@@ -150,15 +152,12 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
   const isResponsible = action.responsiblePersonId
     ? action.responsiblePersonId === actor.id
     : action.assignedTo === actor.name;
-  const isCreator = action.createdByUserId
-    ? action.createdByUserId === actor.id
-    : action.auditor === actor.name;
   const canEdit = isResponsible && ["Assigned", "Open", "In Progress", "Rework Required"].includes(action.status);
   const zoneConfiguration = getFiveSZoneConfiguration(action.area);
   const canAssign = action.status === "Awaiting Assignment" && zoneConfiguration?.leaderId === actor.id;
-  const canReview = isCreator && ["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status);
+  const canReview = zoneConfiguration?.leaderId === actor.id && action.status === "Awaiting Review";
   const canStart = isResponsible && ["Assigned", "Open", "Rework Required"].includes(action.status);
-  const submitLabel = action.status === "Rework Required" ? "Resubmit for Auditor Review" : "Submit for Auditor Review";
+  const submitLabel = action.status === "Rework Required" ? "Resubmit for Review" : "Submit for Review";
   const validResolution = observation.trim() && Boolean(category) && action.evidence.length > 0 && Number.isFinite(Number(costSaving)) && Number(costSaving) >= 0;
 
   function syncFields(updated: MyAction | undefined) {
@@ -192,22 +191,22 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
     window.setTimeout(() => { startAssignedAction(actionId, actor); setPendingTransition(null); }, 220);
   }
 
-  async function addEvidence(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file || !canEdit) return;
-    if ((action?.evidence.length ?? 0) >= MAX_EVIDENCE_IMAGES) { window.alert("Maximum 5 evidence images allowed."); event.target.value = ""; return; }
-    const url = file.type.startsWith("image/") ? await readImage(file) : undefined;
+  function addCapturedAfterPhoto(photo: string) {
+    if (!canEdit) return;
+    if ((action?.evidence.length ?? 0) >= MAX_EVIDENCE_IMAGES) {
+      window.alert("Maximum 5 evidence images allowed.");
+      return;
+    }
     addActionEvidence(actionId, {
       id: `EV-${crypto.randomUUID()}`,
-      name: file.name,
-      type: file.type.startsWith("image/") ? "image" : "document",
+      name: `After photo ${new Date().toLocaleString("en-IN")}.jpg`,
+      type: "image",
       evidenceType: "resolution",
-      mimeType: file.type,
+      mimeType: "image/jpeg",
       uploadedAt: new Date().toISOString(),
       uploadedBy: actor.name,
-      url,
+      url: photo,
     });
-    event.target.value = "";
   }
 
   function confirmSendBack() {
@@ -248,7 +247,14 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
         }
       />
 
-      {canAssign && <Panel title="Assign Responsible Person" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm text-muted-foreground">Assign this {action.area} action to a member of your Zone.</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><Select value={assigneeId} onValueChange={(value)=>setAssigneeId(value??"")}><SelectTrigger className="w-full"><SelectValue placeholder="Select responsible person" /></SelectTrigger><SelectContent>{zoneConfiguration.members.map((member)=><SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select><Button disabled={!assigneeId} onClick={()=>assignActionToZoneMember(action.id, actor, assigneeId)}>Assign Action</Button></div></Panel>}
+      {canAssign && <Panel title="Action Plan Assignment" icon={<ClipboardCheck className="size-4 text-primary" />}>
+        <div className="grid gap-5">
+          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Finding</p><p className="mt-2 text-sm font-medium leading-6">{action.originalFinding ?? action.description}</p></div>
+          <div><div className="flex items-center justify-between gap-3"><label htmlFor="assignment-action-plan" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Auditor&apos;s Proposed Action</label><span className="text-[10px] tabular-nums text-muted-foreground">{assignmentPlan.length} / 500</span></div><Textarea id="assignment-action-plan" rows={4} maxLength={500} className="mt-2 min-h-24" value={assignmentPlan} onChange={(event)=>setAssignmentPlan(event.target.value)} /><p className="mt-1.5 text-xs text-muted-foreground">Review and refine this plan before assigning it. The auditor&apos;s original proposal remains preserved.</p></div>
+          <div className="grid gap-4 sm:grid-cols-3"><Meta label="Priority" value={action.priority}/><Meta label="Due Date" value={formatDate(action.dueDate)}/><Meta label="Proposed By" value={action.proposedActionByName ?? action.createdByName ?? action.auditor ?? "—"}/></div>
+          <div className="flex flex-col gap-3 sm:flex-row"><Select value={assigneeId} onValueChange={(value)=>setAssigneeId(value??"")}><SelectTrigger className="w-full"><SelectValue placeholder="Select responsible person" /></SelectTrigger><SelectContent>{zoneConfiguration.members.map((member)=><SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select><Button disabled={!assigneeId || !assignmentPlan.trim()} onClick={()=>assignActionToZoneMember(action.id, actor, { memberId: assigneeId, actionPlan: assignmentPlan })}>Assign Action</Button></div>
+        </div>
+      </Panel>}
 
       {action.status === "Rework Required" && latestRework && (
         <section className="rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-4 shadow-sm dark:bg-amber-400/[0.06]">
@@ -272,11 +278,18 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
               <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Related Audit Question</p><p className="mt-2 text-sm font-medium leading-6">{action.questionText ?? "No related audit question recorded."}</p></div>
               <div className="rounded-lg border-l-4 border-red-500 bg-red-500/[0.045] px-4 py-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">Finding</p><p className="mt-2 text-base font-medium leading-7">{action.originalFinding ?? action.description}</p></div>
               <div className="grid gap-4 border-t pt-4 sm:grid-cols-3"><Meta label="Compliance" value="Corrective action required" /><Meta label="Observed By" value={action.createdByName ?? action.auditor ?? "—"} /><Meta label="Observed On" value={formatDateTime(action.createdAt)} /></div>
+              <div className="grid gap-4 border-t pt-4 sm:grid-cols-2"><div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Auditor&apos;s Proposed Action</p><p className="mt-2 text-sm leading-6">{action.proposedAction ?? action.description}</p><p className="mt-1 text-xs text-muted-foreground">Proposed by {action.proposedActionByName ?? action.createdByName ?? action.auditor ?? "—"}{action.proposedActionAt ? ` · ${formatDateTime(action.proposedActionAt)}` : ""}</p></div><div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Final Action Plan</p><p className="mt-2 text-sm font-semibold leading-6">{action.actionPlan ?? action.proposedAction ?? action.description}</p>{action.actionPlanEditedByName && <p className="mt-1 text-xs text-muted-foreground">Edited by {action.actionPlanEditedByName}{action.actionPlanEditedAt ? ` · ${formatDateTime(action.actionPlanEditedAt)}` : ""}</p>}</div></div>
               <div className="border-t pt-4">
                 <EvidenceSection eyebrow="Before" title="Original Finding Evidence" description="Read-only evidence captured by the auditor when this action was raised." evidence={action.issueEvidence ?? []} onPreview={setPreview} />
               </div>
             </div>
           </Panel>
+
+          {!canAssign && <Panel title="Action Plan" icon={<ClipboardCheck className="size-4 text-primary" />}>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Approved plan for the responsible person</p>
+            <p className="mt-2 text-base font-semibold leading-7">{action.actionPlan ?? action.proposedAction ?? action.description}</p>
+            <div className="mt-4 grid gap-3 border-t pt-4 sm:grid-cols-2"><Meta label="Assigned By" value={action.assignedByName ?? action.zoneLeaderName ?? "—"}/><Meta label="Assigned On" value={formatDateTime(action.assignedAt)}/></div>
+          </Panel>}
 
           <Panel title="Corrective Measure" icon={<CheckCircle2 className="size-4 text-primary" />}>
           {!isResponsible && action.submittedForReviewAt && (
@@ -336,17 +349,14 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium"><span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-green-600">After</span>Resolution Evidence <span className="text-destructive">*</span></p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Upload evidence showing the completed corrective action.</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Take a photo showing the completed corrective action.</p>
                 </div>
                 {canEdit && (
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                    <Button size="sm" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => fileInputRef.current?.click()}><Upload className="size-4" /> Upload</Button>
-                    <Button size="sm" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => cameraInputRef.current?.click()}><ImageIcon className="size-4" /> Camera</Button>
+                    <Button size="sm" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => setAfterCameraOpen(true)}><ImageIcon className="size-4" /> Take After Photo</Button>
                   </div>
                 )}
               </div>
-              <input ref={fileInputRef} className="hidden" type="file" accept="image/*,.pdf,.doc,.docx" onChange={addEvidence} />
-              <input ref={cameraInputRef} className="hidden" type="file" accept="image/*" capture="environment" onChange={addEvidence} />
               <EvidenceGrid evidence={action.evidence} editable={canEdit} onPreview={setPreview} onRemove={(id) => removeActionEvidence(action.id, id)} emptyLabel="No resolution evidence attached" />
             </div>
 
@@ -367,7 +377,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
           </div>
         </Panel>
 
-          {canReview && <Panel title="Review Decision" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm leading-6 text-muted-foreground">Review the original finding, corrective measure and Before/After evidence before making a decision.</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"><Button className="w-full sm:w-auto" variant="outline" onClick={()=>setSendBackOpen(true)}><RotateCcw className="size-4"/> Send Back</Button><Button className="w-full sm:w-auto" onClick={()=>setCloseOpen(true)}><CheckCircle2 className="size-4"/> Close Action</Button></div></Panel>}
+          {canReview && <Panel title="Zone Leader Review" icon={<ClipboardCheck className="size-4 text-primary" />}><p className="text-sm leading-6 text-muted-foreground">Review the original finding, final action plan, corrective measure, and Before/After evidence before making a decision.</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"><Button className="w-full sm:w-auto" variant="outline" onClick={()=>setSendBackOpen(true)}><RotateCcw className="size-4"/> Return for Rework</Button><Button className="w-full sm:w-auto" onClick={()=>setCloseOpen(true)}><CheckCircle2 className="size-4"/> Approve &amp; Close</Button></div></Panel>}
         </main>
 
         <aside className="order-first min-w-0 2xl:order-none 2xl:sticky 2xl:top-4"><ActionSummary action={action} /></aside>
@@ -378,7 +388,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
       <Dialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Send Action Back</DialogTitle>
+            <DialogTitle>Return for Rework</DialogTitle>
             <DialogDescription>Explain what the responsible person needs to correct before resubmitting.</DialogDescription>
           </DialogHeader>
           <div>
@@ -387,7 +397,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSendBackOpen(false)}>Cancel</Button>
-            <Button variant="destructive" disabled={!remark.trim() || pendingTransition === "send-back"} onClick={confirmSendBack}>{pendingTransition === "send-back" ? "Sending Back..." : "Send Back"}</Button>
+            <Button variant="destructive" disabled={!remark.trim() || pendingTransition === "send-back"} onClick={confirmSendBack}>{pendingTransition === "send-back" ? "Returning..." : "Return for Rework"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -395,15 +405,23 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
       <Dialog open={closeOpen} onOpenChange={setCloseOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Close this action?</DialogTitle>
-            <DialogDescription>The submitted resolution will be accepted and this action will be marked as completed.</DialogDescription>
+            <DialogTitle>Approve and close this action?</DialogTitle>
+            <DialogDescription>The Zone Leader approval will accept the submitted resolution and mark this action as completed.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCloseOpen(false)}>Cancel</Button>
-            <Button onClick={confirmClose} disabled={pendingTransition === "close"}>{pendingTransition === "close" ? "Closing..." : "Close Action"}</Button>
+            <Button onClick={confirmClose} disabled={pendingTransition === "close"}>{pendingTransition === "close" ? "Closing..." : "Approve & Close"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AfterPhotoCaptureDialog
+        open={afterCameraOpen}
+        beforeImage={action.issueEvidence?.find((item) => item.type === "image" && item.url)?.url}
+        beforeName={action.issueEvidence?.find((item) => item.type === "image" && item.url)?.name}
+        onOpenChange={setAfterCameraOpen}
+        onUsePhoto={addCapturedAfterPhoto}
+      />
 
       {preview && (
         <div className="fixed inset-0 z-[10020] flex flex-col bg-slate-950/95" role="dialog" aria-modal="true" aria-label={`Preview ${preview.name}`}>
@@ -434,7 +452,7 @@ function LifecycleTimeline({ action }: { action: MyAction }) {
   const started = [...activities].reverse().find((item) => item.type === "started");
   const submitted = [...activities].reverse().find((item) => item.type === "submitted" || item.type === "resubmitted");
   const closed = [...activities].reverse().find((item) => item.type === "closed");
-  const reviewActive = ["Pending Review", "Awaiting Review", "Completed"].includes(action.status);
+  const reviewActive = ["Awaiting Review", "Completed"].includes(action.status);
   const steps = ["Assigned", "In Progress", "Submitted for Review", "Under Review", "Closed"];
   const currentIndex = closed
     ? 4
@@ -475,10 +493,11 @@ function ActionSummary({ action }: { action: MyAction }) {
         <Meta label="Department" value={action.department} />
         <div className="grid grid-cols-2 gap-3">
           <div><p className="text-[11px] uppercase tracking-wide text-muted-foreground">Priority</p><Badge className="mt-1" variant={PRIORITY_VARIANTS[action.priority]}>{action.priority}</Badge></div>
-          <div><p className="text-[11px] uppercase tracking-wide text-muted-foreground">Status</p><Badge className="mt-1" variant={STATUS_VARIANTS[action.status]}>{action.status}</Badge></div>
+          <div><p className="text-[11px] uppercase tracking-wide text-muted-foreground">Status</p><Badge className="mt-1" variant={STATUS_VARIANTS[action.status]}>{getActionStatusLabel(action.status)}</Badge></div>
         </div>
         <Meta label="Due Date" value={formatDate(action.dueDate)} icon={<CalendarDays className="size-3.5" />} />
         <Meta label="Responsible Person" value={action.responsiblePersonName ?? action.assignedTo} />
+        <Meta label="Zone Leader" value={action.zoneLeaderName ?? "—"} />
         <Meta label="Raised By" value={`${action.createdByName ?? action.auditor ?? "—"} (Auditor)`} />
         <Meta label="Created" value={formatDateTime(action.createdAt)} />
       </div>
@@ -498,7 +517,7 @@ function ReviewHistory({ action }: { action: MyAction }) {
               <span className="relative z-10 mt-1.5 size-[11px] shrink-0 rounded-full border-2 border-card bg-primary" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold">{ACTIVITY_LABELS[item.type]}</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{formatDateTime(item.createdAt)} · {item.actorName}</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{formatDateTime(item.createdAt)} · {item.actorName}{item.actorRole ? ` · ${item.actorRole}` : ""}</p>
                 {item.remark && <p className="mt-2 rounded-md border bg-muted/30 p-2 text-xs leading-5">{item.remark}</p>}
               </div>
             </li>
@@ -535,11 +554,8 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
-function formatDateTime(value: string) {
+function formatDateTime(value?: string) {
+  if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
-}
-
-function readImage(file: File): Promise<string | undefined> {
-  return optimizeEvidenceImage(file).then(({ dataUrl }) => dataUrl).catch((error) => { window.alert(error instanceof Error ? error.message : "Unable to process this image."); return undefined; });
 }

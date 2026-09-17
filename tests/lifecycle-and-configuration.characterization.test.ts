@@ -53,8 +53,6 @@ describe("lifecycle derivation", () => {
       progress: getActionLifecycleStage("In Progress"),
       overdue: getActionLifecycleStage("Overdue"),
       rework: getActionLifecycleStage("Rework Required"),
-      submitted: getActionLifecycleStage("Pending Auditor Review"),
-      review: getActionLifecycleStage("Pending Review"),
       awaitingReview: getActionLifecycleStage("Awaiting Review"),
       complete: getActionLifecycleStage("Completed"),
     }).toEqual({
@@ -64,8 +62,6 @@ describe("lifecycle derivation", () => {
       progress: "In Progress",
       overdue: "In Progress",
       rework: "In Progress",
-      submitted: "Submitted for Review",
-      review: "Under Review",
       awaitingReview: "Under Review",
       complete: "Closed",
     });

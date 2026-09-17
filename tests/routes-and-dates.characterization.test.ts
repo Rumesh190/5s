@@ -61,3 +61,18 @@ describe("date-only timezone behavior", () => {
     expect(evaluate("America/Los_Angeles", expression)).toBe("26");
   });
 });
+
+describe("audit completion date requirement", () => {
+  const auditCreateSource = read("features/five-s/components/FiveSAuditCreate.tsx");
+  const translations = read("lib/i18n.ts");
+
+  it("defaults a new audit to its local creation date without adding days", () => {
+    expect(auditCreateSource).toContain("() => toLocalInputDate(createdAt)");
+    expect(auditCreateSource).not.toContain("date.setDate(date.getDate() + 2)");
+  });
+
+  it("uses audit completion terminology without changing action due-date terminology", () => {
+    expect(translations).toContain('"audit.dueDate": "Audit Completion Date"');
+    expect(translations).toContain('"action.dueDate": "Due Date"');
+  });
+});

@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 import { FIVE_S_AUDITS } from "@/features/five-s/data/five-s-data";
 
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
-import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
+import { readStorageJson, readStorageString, removeStorage, safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 /* =========================================================
    STORAGE
@@ -13,9 +13,6 @@ import { safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 const STORAGE_KEY =
   "manufacturing-qms-five-s-audits-v1";
-
-const AUDIT_NUMBER_STORAGE_KEY =
-  "manufacturing-qms-five-s-next-audit-number-v1";
 
 const AUDIT_SEQUENCE_STORAGE_KEY =
   "standalone-5s-audit-sequences-v2";
@@ -58,24 +55,18 @@ function loadFromStorage(): void {
   initializedFromStorage = true;
 
   try {
-    const stored =
-      window.localStorage.getItem(
-        STORAGE_KEY
-      );
+    const parsed = readStorageJson<FiveSAudit[]>(STORAGE_KEY);
 
-    if (!stored) {
+    if (!parsed) {
       return;
     }
-
-    const parsed: unknown =
-      JSON.parse(stored);
 
     if (!Array.isArray(parsed)) {
       return;
     }
 
     let storedAudits = parsed as FiveSAudit[];
-    const fixtureVersion = window.localStorage.getItem(AUDIT_FIXTURE_VERSION_KEY);
+    const fixtureVersion = readStorageString(AUDIT_FIXTURE_VERSION_KEY);
     if (fixtureVersion !== AUDIT_FIXTURE_VERSION) {
       const canonicalAudit = FIVE_S_AUDITS.find((audit) => audit.id === "5S-EGM-ZA-006");
       if (canonicalAudit) {
@@ -194,47 +185,6 @@ export function getFiveSAuditById(
    ========================================================= */
 
 /**
- * Find the highest audit number already present.
- *
- * Supports:
- *
- * 5S-001-CHN-ASM1
- * 5S-027-HSR-WLD
- *
- * Older demo records such as:
- *
- * 5S-AUD-001
- *
- * are intentionally ignored.
- */
-function getHighestAuditNumber(): number {
-  let highestNumber = 0;
-
-  for (const audit of audits) {
-    const match =
-      audit.title.match(
-        /^5S-(\d+)-/i
-      );
-
-    if (!match) {
-      continue;
-    }
-
-    const number =
-      Number(match[1]);
-
-    if (
-      Number.isFinite(number) &&
-      number > highestNumber
-    ) {
-      highestNumber = number;
-    }
-  }
-
-  return highestNumber;
-}
-
-/**
  * Get the next permanent audit number.
  *
  * The number is stored separately from the audit list.
@@ -250,8 +200,7 @@ function getStoredSequences(): Record<string, number> {
   if (typeof window === "undefined") return {};
 
   try {
-    const stored = window.localStorage.getItem(AUDIT_SEQUENCE_STORAGE_KEY);
-    const parsed: unknown = stored ? JSON.parse(stored) : {};
+    const parsed = readStorageJson<Record<string, number>>(AUDIT_SEQUENCE_STORAGE_KEY) ?? {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? parsed as Record<string, number>
       : {};
@@ -883,22 +832,12 @@ export function resetFiveSAudits(): void {
   ];
 
   /**
-   * Reset the audit number counter too.
-   *
-   * The next generated audit will start after
-   * the highest generated 5S number in the demo data.
+   * Reset the active per-plant/per-zone sequence counter too.
    */
   if (
     typeof window !== "undefined"
   ) {
-    const highest =
-      getHighestAuditNumber();
-
-    safeSetStorageString(AUDIT_NUMBER_STORAGE_KEY, String(highest + 1));
-
-    window.localStorage.removeItem(
-      AUDIT_SEQUENCE_STORAGE_KEY
-    );
+    removeStorage(AUDIT_SEQUENCE_STORAGE_KEY);
   }
 
   persistAudits();
@@ -918,17 +857,8 @@ export function clearFiveSAuditStorage(): void {
   }
 
   try {
-    window.localStorage.removeItem(
-      STORAGE_KEY
-    );
-
-    window.localStorage.removeItem(
-      AUDIT_NUMBER_STORAGE_KEY
-    );
-
-    window.localStorage.removeItem(
-      AUDIT_SEQUENCE_STORAGE_KEY
-    );
+    removeStorage(STORAGE_KEY);
+    removeStorage(AUDIT_SEQUENCE_STORAGE_KEY);
 
     audits = [
       ...FIVE_S_AUDITS,

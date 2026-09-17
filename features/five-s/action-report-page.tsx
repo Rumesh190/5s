@@ -10,13 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/components/preferences/use-i18n";
 import type { MyAction, MyActionActivity, MyActionEvidence } from "./types/my-actions";
+import SharedReportHeader from "./components/ReportHeader";
 
 interface Props { action: MyAction; onBack: () => void; backLabel?: string }
 
 const ACTIVITY_LABELS: Record<MyActionActivity["type"], string> = {
-  created: "Action created", awaiting_assignment: "Awaiting assignment",
+  created: "Action created", proposed: "Proposed action submitted", awaiting_assignment: "Awaiting assignment",
   assigned: "Assigned", started: "Work started", submitted: "Submitted for review",
-  resubmitted: "Resubmitted for review", reviewed: "Reviewed", sent_back: "Sent back for rework", closed: "Approved & closed",
+  resubmitted: "Resubmitted for review", review_requested: "Awaiting Zone Leader Review", reviewed: "Reviewed", sent_back: "Returned for rework", closed: "Approved & closed",
 };
 
 export default function FiveSActionReportPage({ action, onBack, backLabel = "Back to Actions" }: Props) {
@@ -28,8 +29,8 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
   const reviewed = [...history].reverse().find((event) => event.type === "reviewed");
   const closed = [...history].reverse().find((event) => event.type === "closed");
   const responsible = action.responsiblePersonName ?? action.assignedTo;
-  const approver = action.reviewedBy ?? action.createdByName ?? action.auditor ?? "—";
-  const completedAt = closed?.createdAt ?? action.completedAt;
+  const approver = action.reviewedByRole === "Zone Leader" ? action.reviewedBy ?? action.zoneLeaderName ?? "—" : action.closedBy ?? action.zoneLeaderName ?? "—";
+  const completedAt = action.closedAt ?? closed?.createdAt ?? action.completedAt;
   const result = action.resolutionObservation ?? action.actionTakenDescription ?? "No improvement result recorded.";
   const beforeText = action.originalFinding ?? action.description;
   const afterText = result;
@@ -41,8 +42,8 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
     { label: "Assigned", icon: UserRound, tone: "blue", event: assigned, fallbackDate: action.createdAt, fallbackActor: action.createdByName ?? action.auditor },
     { label: "Work Started", icon: Play, tone: "sky", event: started },
     { label: "Submitted for Review", icon: Send, tone: "amber", event: submitted, fallbackDate: action.submittedForReviewAt, fallbackActor: responsible },
-    { label: "Reviewed", icon: ClipboardCheck, tone: "violet", event: reviewed, fallbackDate: action.reviewedAt, fallbackActor: action.reviewedBy ?? action.auditor },
-    { label: "Closed", icon: Check, tone: "green", event: closed, fallbackDate: action.completedAt, fallbackActor: approver },
+    { label: "Reviewed by Zone Leader", icon: ClipboardCheck, tone: "violet", event: reviewed, fallbackDate: action.reviewedAt, fallbackActor: approver },
+    { label: "Approved & Closed", icon: Check, tone: "green", event: closed, fallbackDate: action.closedAt ?? action.completedAt, fallbackActor: action.closedBy ?? approver },
   ] as const;
 
   async function handlePrint() {
@@ -81,11 +82,23 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
           </section>
 
           <section className="action-report-block">
-            <div className="improvement-details grid gap-3 md:grid-cols-3">
+            <div className="improvement-details grid gap-3 md:grid-cols-2">
               <DetailCard icon={Flag} title={t("actionReport.originalFinding")} text={action.originalFinding ?? action.description} />
-              <DetailCard icon={ClipboardCheck} title={t("actionReport.correctiveAction")} text={action.description} />
+              <DetailCard icon={ClipboardCheck} title="Auditor's Proposed Action" text={action.proposedAction ?? action.description} />
+              <DetailCard icon={ClipboardCheck} title="Final Action Plan" text={action.actionPlan ?? action.proposedAction ?? action.description} />
               <DetailCard icon={Sparkles} title={t("actionReport.result")} text={result} />
             </div>
+          </section>
+
+          <section className="action-report-block grid gap-px overflow-hidden rounded-lg border border-blue-100 bg-blue-100 dark:border-slate-700 dark:bg-slate-700 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ["Responsible Member", responsible],
+              ["Zone Leader", action.zoneLeaderName ?? "—"],
+              ["Reviewed By", approver],
+              ["Review Date", formatDateTime(action.reviewedAt)],
+              ["Closed By", action.closedBy ?? approver],
+              ["Closure Date", formatDateTime(action.closedAt ?? action.completedAt)],
+            ].map(([label, value]) => <div key={label} className="bg-white p-3 dark:bg-slate-900"><p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-xs font-semibold">{value}</p></div>)}
           </section>
 
           <section className="action-report-timeline action-report-block rounded-lg border border-blue-200 bg-blue-50/[0.16] px-4 py-4 dark:border-slate-700 dark:bg-slate-900">
@@ -100,8 +113,8 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
 
           <section className="report-signoff action-report-block grid overflow-hidden rounded-lg border border-blue-100 bg-white lg:grid-cols-[1fr_1fr_2fr] lg:divide-x lg:divide-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:lg:divide-slate-700">
             <ApprovalPanel title={t("actionReport.preparedBy")} name={responsible} role={`${action.department} • ${action.area}`} date={completedAt} photo={responsiblePhoto} />
-            <ApprovalPanel title={t("actionReport.approvedBy")} name={approver} role={t("audit.auditor")} date={action.reviewedAt ?? completedAt} photo={approverPhoto} />
-            <ReviewHistory history={history} reviewedAt={action.reviewedAt} reviewedBy={action.reviewedBy ?? action.auditor} />
+            <ApprovalPanel title={t("actionReport.approvedBy")} name={approver} role="Zone Leader" date={action.reviewedAt ?? completedAt} photo={approverPhoto} />
+            <ReviewHistory history={history} reviewedAt={action.reviewedAt} reviewedBy={approver} />
           </section>
 
           <footer className="action-report-block flex items-center justify-center gap-3 rounded-lg border border-blue-100 bg-gradient-to-r from-blue-50 via-sky-50 to-blue-50 px-4 py-3 text-blue-800 dark:border-blue-900/60 dark:from-blue-950/40 dark:via-slate-900 dark:to-blue-950/40 dark:text-blue-200">
@@ -115,7 +128,7 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
 
 function ReportHeader({ action, generatedAt }: { action: MyAction; generatedAt: string }) {
   const { t } = useI18n();
-  return <header className="report-header action-report-block relative border-b border-blue-100 bg-gradient-to-b from-blue-50/60 to-white px-4 py-5 text-center dark:border-slate-700 dark:from-blue-950/25 dark:to-slate-900 sm:px-7"><div className="mb-3 flex justify-center sm:absolute sm:right-5 sm:top-4 sm:mb-0"><Badge variant="success" className="border-green-300 bg-green-50 px-3 py-1 text-green-700 uppercase tracking-wide shadow-none dark:border-green-800 dark:bg-green-950/40 dark:text-green-300"><CheckCircle2 className="size-3.5" /> {t("common.completed")}</Badge></div><p className="text-xl font-extrabold uppercase tracking-[0.04em] text-blue-800 dark:text-blue-300 sm:text-[30px] sm:tracking-[0.055em]">{t("actionReport.title")}</p><div className="mt-2 flex min-w-0 flex-wrap justify-center gap-x-8 gap-y-1 text-xs text-slate-600 dark:text-slate-300"><span className="break-all"><strong className="text-blue-800 dark:text-blue-300">{t("actionReport.improvementNumber")}:</strong> {action.id}</span><span><strong>{t("reports.reportGenerated")}:</strong> {generatedAt}</span></div><h1 className="mx-auto mt-3 max-w-4xl break-words text-lg font-extrabold tracking-tight text-slate-950 dark:text-white sm:px-16 sm:text-[25px]">{action.title}</h1></header>;
+  return <SharedReportHeader title={t("actionReport.title")} reportId={action.id} subtitle={action.title} status={<Badge variant="success" className="border-green-300 bg-green-50 px-3 py-1 text-green-700 uppercase tracking-wide shadow-none"><CheckCircle2 className="size-3.5" /> {t("common.completed")}</Badge>} metadata={<><strong>{t("reports.reportGenerated")}:</strong> {generatedAt}</>} className="report-header action-report-block border-blue-100" />;
 }
 
 function ReportMetadata({ action, completedAt }: { action: MyAction; completedAt?: string }) {
@@ -131,7 +144,7 @@ function ReportMetadata({ action, completedAt }: { action: MyAction; completedAt
 function EvidencePanel({ tone, label, evidence, description, empty }: { tone: "before" | "after"; label: string; evidence: MyActionEvidence[]; description: string; empty: string }) {
   const primary = evidence.find((item) => item.type === "image" && item.url);
   const before = tone === "before";
-  return <div className="overflow-hidden rounded-lg border border-blue-100 bg-white dark:border-slate-700 dark:bg-slate-900"><div className="flex justify-center px-3 py-1.5"><Badge className={before ? "border border-red-600 bg-red-600 px-4 py-1 text-white shadow-sm hover:bg-red-600" : "border border-green-600 bg-green-600 px-4 py-1 text-white shadow-sm hover:bg-green-600"}>{label}</Badge></div>{primary ? <div className="mx-3 aspect-[4/3] overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"><img src={primary.url} alt={primary.name} className="size-full object-cover" /></div> : <div className="mx-3 flex aspect-[4/3] items-center justify-center rounded-md bg-slate-50 dark:bg-slate-800"><div className="text-center"><FileText className="mx-auto size-7 text-slate-400" /><p className="mt-2 text-xs text-slate-500">{empty}</p></div></div>}<p className="min-h-14 px-4 py-2.5 text-center text-xs font-semibold leading-5 text-slate-700 dark:text-slate-200">{description}</p>{evidence.length > 1 && <div className="flex gap-1.5 border-t border-slate-200 p-2 dark:border-slate-700">{evidence.slice(1).map((item) => item.url && <img key={item.id} src={item.url} alt={item.name} className="size-9 rounded object-cover" />)}</div>}</div>;
+  return <div className="overflow-hidden rounded-lg border border-blue-100 bg-white dark:border-slate-700 dark:bg-slate-900"><div className="flex justify-center px-3 py-1.5"><Badge className={before ? "border border-red-600 bg-red-600 px-4 py-1 text-white shadow-sm hover:bg-red-600" : "border border-green-600 bg-green-600 px-4 py-1 text-white shadow-sm hover:bg-green-600"}>{label}</Badge></div>{primary ? <><div className="mx-3 aspect-[4/3] overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"><img src={primary.url} alt={primary.name} className="size-full object-cover" /></div>{!before && <p className="px-3 pt-2 text-center text-[10px] text-slate-500">Captured {formatDateTime(primary.uploadedAt)}</p>}</> : <div className="mx-3 flex aspect-[4/3] items-center justify-center rounded-md bg-slate-50 dark:bg-slate-800"><div className="text-center"><FileText className="mx-auto size-7 text-slate-400" /><p className="mt-2 text-xs text-slate-500">{empty}</p></div></div>}<p className="min-h-14 px-4 py-2.5 text-center text-xs font-semibold leading-5 text-slate-700 dark:text-slate-200">{description}</p>{evidence.length > 1 && <div className="flex gap-1.5 border-t border-slate-200 p-2 dark:border-slate-700">{evidence.slice(1).map((item) => item.url && <img key={item.id} src={item.url} alt={item.name} className="size-9 rounded object-cover" />)}</div>}</div>;
 }
 
 function CompletedByPanel({ name, department, zone, completedAt, photo }: { name: string; department: string; zone: string; completedAt?: string; photo?: string }) {
@@ -160,7 +173,7 @@ function ApprovalPanel({ title, name, role, date, photo }: { title: string; name
 function ReviewHistory({ history, reviewedAt, reviewedBy }: { history: MyActionActivity[]; reviewedAt?: string; reviewedBy?: string }) {
   const events = [...history];
   const hasReview = !events.some((event) => event.type === "reviewed") && events.some((event) => event.type === "closed") && reviewedAt;
-  return <article className="p-4"><p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-blue-700 dark:text-blue-400">Review History</p><ol className="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2">{events.flatMap((event) => { const rows = [<HistoryRow key={event.id} label={`${ACTIVITY_LABELS[event.type]} by ${event.actorName}`} date={event.createdAt} remark={event.remark} />]; if (event.type === "closed" && hasReview) rows.unshift(<HistoryRow key={`${event.id}-reviewed`} label={`Reviewed by ${reviewedBy ?? event.actorName}`} date={reviewedAt} />); return rows; })}</ol></article>;
+  return <article className="p-4"><p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-blue-700 dark:text-blue-400">Review History</p><ol className="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2">{events.flatMap((event) => { const rows = [<HistoryRow key={event.id} label={`${ACTIVITY_LABELS[event.type]} by ${event.actorName}${event.actorRole ? ` · ${event.actorRole}` : ""}`} date={event.createdAt} remark={event.remark} />]; if (event.type === "closed" && hasReview) rows.unshift(<HistoryRow key={`${event.id}-reviewed`} label={`Reviewed by ${reviewedBy ?? event.actorName} · Zone Leader`} date={reviewedAt} />); return rows; })}</ol></article>;
 }
 
 function HistoryRow({ label, date, remark }: { label: string; date?: string; remark?: string }) { return <li className="review-history-row relative min-w-0 border-l border-slate-300 pl-3 dark:border-slate-600"><span className="absolute -left-[3px] top-1 size-[5px] rounded-full bg-blue-600" /><p className="min-w-0 text-[10px] font-semibold leading-4">{label}</p><p className="text-[9px] text-slate-500">{formatDateTime(date)}</p>{remark && <p className="mt-1 text-[9px] italic leading-4 text-slate-600 dark:text-slate-300">Remark: {remark}</p>}</li> }

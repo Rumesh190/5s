@@ -1,11 +1,14 @@
 "use client";
 
 import FiveSPageHeader from "./components/FiveSPageHeader";
+import ReportHeader, { prepareReportForPrint } from "./components/ReportHeader";
 import { PageContainer } from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
@@ -42,12 +45,15 @@ import {
   Plus,
   Printer,
   RotateCcw,
+  Search,
 } from "lucide-react";
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { canAuditZone } from "@/lib/five-s/configuration";
 import type { MyAction, MyActionEvidence, MyActionStatus } from "./types/my-actions";
+import { getActionStatusLabel } from "@/lib/five-s/lifecycle-status";
 import { useI18n } from "@/components/preferences/use-i18n";
 import { MVP_DASHBOARD_DATA } from "./data/mvp-dashboard-data";
+import { filterActionsByZoneMember, getDashboardZoneMembers, hasBeforeAfterEvidence, searchNCActions, selectActionsByIds } from "@/lib/five-s/dashboard-action-filters";
 
 type DashboardPeriod = "week" | "month" | "year" | "custom";
 type DashboardView = "overview" | "nc-summary" | "before-after";
@@ -253,9 +259,18 @@ export default function FiveSDashboardPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [zoneFilter, setZoneFilter] = useState("All");
+  const [zoneMemberFilter, setZoneMemberFilter] = useState("All");
   const [preview, setPreview] = useState<MyActionEvidence | null>(null);
   const [dashboardView, setDashboardView] = useState<DashboardView>("overview");
   const [selectedImprovementId, setSelectedImprovementId] = useState<string | null>(null);
+
+  const zoneMemberOptions = useMemo(() => {
+    return getDashboardZoneMembers(actions, zoneFilter);
+  }, [actions, zoneFilter]);
+
+  const effectiveZoneMemberFilter = zoneMemberFilter === "All" || zoneMemberOptions.some((member) => member.id === zoneMemberFilter)
+    ? zoneMemberFilter
+    : "All";
 
   /* =======================================================
      DASHBOARD METRICS
@@ -310,7 +325,7 @@ export default function FiveSDashboardPage() {
     const averageClosureDays = closureDays.length ? closureDays.reduce((sum, days) => sum + days, 0) / closureDays.length : 0;
     const attentionRank = (action: MyAction) => {
       const overdue = action.status === "Overdue" || (action.status !== "Completed" && action.dueDate < new Date().toISOString().slice(0, 10));
-      return (overdue ? 100 : 0) + (action.priority === "Critical" ? 40 : action.priority === "High" ? 30 : 0) + (action.status === "Rework Required" ? 20 : action.status === "Pending Review" || action.status === "Awaiting Review" ? 10 : 0);
+      return (overdue ? 100 : 0) + (action.priority === "Critical" ? 40 : action.priority === "High" ? 30 : 0) + (action.status === "Rework Required" ? 20 : action.status === "Awaiting Review" ? 10 : 0);
     };
 
     const actionsByZone = new Map<string, { Open: number; Closed: number }>();
@@ -364,10 +379,16 @@ export default function FiveSDashboardPage() {
     };
   }, [actions, audits, endDate, period, startDate, zoneFilter]);
 
+  const memberScopedActions = useMemo(
+    () => filterActionsByZoneMember(metrics.filteredActions, effectiveZoneMemberFilter, zoneMemberOptions),
+    [effectiveZoneMemberFilter, metrics.filteredActions, zoneMemberOptions]
+  );
+  const beforeAfterActions = useMemo(() => memberScopedActions.filter(hasBeforeAfterEvidence), [memberScopedActions]);
+
   const selectedImprovement =
-    metrics.filteredActions.find((action) => action.id === selectedImprovementId) ??
-    metrics.filteredActions.find((action) => action.status === "Completed") ??
-    metrics.filteredActions[0];
+    beforeAfterActions.find((action) => action.id === selectedImprovementId) ??
+    beforeAfterActions.find((action) => action.status === "Completed") ??
+    beforeAfterActions[0];
 
   /* =======================================================
      START AUDIT
@@ -506,7 +527,11 @@ export default function FiveSDashboardPage() {
           ))}
         </nav>
         <div className="flex min-w-0 flex-wrap items-center gap-1 border-t px-1 pt-1 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0" role="group" aria-label="Dashboard time range">
-          <DashboardFilter value={zoneFilter} onChange={setZoneFilter} label="All zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} />
+          <DashboardFilter value={zoneFilter} onChange={(value) => { setZoneFilter(value); setZoneMemberFilter("All"); }} label="All zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} />
+          {dashboardView !== "overview" && <Select value={effectiveZoneMemberFilter} onValueChange={(value) => setZoneMemberFilter(value ?? "All")}>
+            <SelectTrigger className="h-9 min-w-44" aria-label="Zone Member"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="All">All Zone Members</SelectItem>{zoneMemberOptions.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent>
+          </Select>}
           {(["week", "month", "year", "custom"] as const).map((value) => (
             <Button key={value} type="button" size="sm" variant={period === value ? "secondary" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="shrink-0 capitalize">
               {value === "week" ? t("common.weekly") : value === "month" ? t("common.monthly") : value === "year" ? t("common.yearly") : t("common.custom")}
@@ -544,8 +569,10 @@ export default function FiveSDashboardPage() {
       {dashboardView === "nc-summary" && (
         <NCSummaryTable
           key={zoneFilter}
-          actions={actions}
+          actions={memberScopedActions}
           dashboardZone={zoneFilter}
+          memberFiltered={effectiveZoneMemberFilter !== "All"}
+          onClearMember={() => setZoneMemberFilter("All")}
           onPreview={setPreview}
           onOpen={(action) => {
             setSelectedImprovementId(action.id);
@@ -558,7 +585,9 @@ export default function FiveSDashboardPage() {
       {dashboardView === "before-after" && (
         <BeforeAfterView
           action={selectedImprovement}
-          actions={metrics.filteredActions}
+          actions={beforeAfterActions}
+          memberFiltered={effectiveZoneMemberFilter !== "All"}
+          onClearMember={() => setZoneMemberFilter("All")}
           onSelect={setSelectedImprovementId}
           onPreview={setPreview}
           onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)}
@@ -570,15 +599,17 @@ export default function FiveSDashboardPage() {
   );
 }
 
-function NCSummaryTable({ actions, dashboardZone, onPreview, onOpen, onReport }: { actions: MyAction[]; dashboardZone:string; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
+function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember, onPreview, onOpen, onReport }: { actions: MyAction[]; dashboardZone:string; memberFiltered: boolean; onClearMember: () => void; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
   const zones = useMemo(() => FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name), []);
   const [selectedZones,setSelectedZones]=useState<string[]>(()=>dashboardZone==="All"?zones:[dashboardZone]);
   const [fromDate,setFromDate]=useState(""); const [toDate,setToDate]=useState("");
+  const [exportOpen,setExportOpen]=useState(false);
   const allZonesSelected=selectedZones.length===zones.length;
   const hasActiveFilters=!allZonesSelected||Boolean(fromDate)||Boolean(toDate);
   const zoneLabel=allZonesSelected?"All zones":selectedZones.length===0?"No zones selected":selectedZones.length<=2?selectedZones.join(" + "):`${selectedZones.length} zones`;
   const filteredActions=actions.filter((action)=>selectedZones.includes(action.area)&&(!fromDate||action.createdAt.slice(0,10)>=fromDate)&&(!toDate||action.createdAt.slice(0,10)<=toDate));
   function toggleZone(zone:string,checked:boolean){setSelectedZones(current=>checked?[...new Set([...current,zone])]:current.filter(item=>item!==zone));}
+  function openExport(){if(filteredActions.length)setExportOpen(true);}
   return (
     <Card className="min-w-0 overflow-hidden">
       <CardHeader className="grid-cols-1 gap-x-6 gap-y-3 border-b bg-muted/15 pb-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:pb-6">
@@ -589,7 +620,7 @@ function NCSummaryTable({ actions, dashboardZone, onPreview, onOpen, onReport }:
             <input aria-label="NC summary from date" type="date" value={fromDate} max={toDate||undefined} onChange={(event)=>setFromDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"/>
             <input aria-label="NC summary to date" type="date" value={toDate} min={fromDate||undefined} onChange={(event)=>setToDate(event.target.value)} className="h-9 min-w-0 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"/>
             <Button type="button" size="sm" variant="ghost" className="col-span-2 sm:col-span-1" disabled={!hasActiveFilters} onClick={()=>{setSelectedZones([...zones]);setFromDate("");setToDate("")}}><RotateCcw className="size-4"/>Clear Filters</Button>
-            <Button type="button" size="sm" variant="outline" className="col-span-2 w-full bg-background shadow-none sm:col-span-1 sm:w-auto" disabled={!filteredActions.length} onClick={() => exportNonComplianceCsv(filteredActions)}><Download className="size-4" /> Export {filteredActions.length} CSV</Button>
+            <Button type="button" size="sm" variant="outline" className="col-span-2 w-full bg-background shadow-none sm:col-span-1 sm:w-auto" disabled={!filteredActions.length} onClick={openExport}><Download className="size-4" /> Export</Button>
           </div>
         </CardAction>
       </CardHeader>
@@ -616,13 +647,53 @@ function NCSummaryTable({ actions, dashboardZone, onPreview, onOpen, onReport }:
                   <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDashboardDate(action.completedAt)}</td>
                   <td className="px-4 py-3"><Button type="button" size="sm" variant="ghost" onClick={() => action.status === "Completed" ? onReport(action) : onOpen(action)}>{action.status === "Completed" ? "Report" : "View"}<ExternalLink className="size-3.5" /></Button></td>
                 </tr>;
-              }) : <tr><td colSpan={11} className="px-6 py-16 text-center text-sm text-muted-foreground">No non-compliances match the selected filters.</td></tr>}
+              }) : <tr><td colSpan={11} className="px-6 py-16 text-center text-sm text-muted-foreground"><p>{memberFiltered ? "No corrective actions found for this Zone Member." : "No non-compliances match the selected filters."}</p>{memberFiltered && <Button type="button" size="sm" variant="ghost" className="mt-3" onClick={onClearMember}>View all members</Button>}</td></tr>}
             </tbody>
           </table>
         </div>
       </CardContent>
+      {exportOpen&&<ExportNCSummaryDialog open actions={filteredActions} onOpenChange={setExportOpen} />}
     </Card>
   );
+}
+
+function ExportNCSummaryDialog({ open, actions, onOpenChange }: { open: boolean; actions: MyAction[]; onOpenChange: (open: boolean) => void }) {
+  const [query,setQuery]=useState("");
+  const [selectedIds,setSelectedIds]=useState<string[]>(()=>actions.map((action)=>action.id));
+  const availableIds=actions.map((action)=>action.id);
+  const selectedCount=selectedIds.filter((id)=>availableIds.includes(id)).length;
+  const allSelected=actions.length>0&&selectedCount===actions.length;
+  const searchedActions=searchNCActions(actions,query);
+  function handleOpenChange(next:boolean){
+    onOpenChange(next);
+  }
+  function toggleAction(id:string,checked:boolean){setSelectedIds(current=>checked?[...new Set([...current,id])]:current.filter(item=>item!==id));}
+  function exportSelected(){
+    const selected=selectActionsByIds(actions,selectedIds);
+    if(!selected.length)return;
+    exportNonComplianceCsv(selected);
+    onOpenChange(false);
+  }
+  return <Dialog open={open} onOpenChange={handleOpenChange}>
+    <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 sm:!max-w-4xl">
+      <DialogHeader className="shrink-0 border-b px-5 py-4 sm:px-6"><DialogTitle>Export NC Summary</DialogTitle><DialogDescription>Choose the NC records you want to export.</DialogDescription></DialogHeader>
+      <div className="grid min-h-0 gap-3 px-5 py-4 sm:px-6">
+        <div className="relative"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input value={query} onChange={(event)=>setQuery(event.target.value)} className="pl-9" placeholder="Search NC ID, Zone, Member..." aria-label="Search export records"/></div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/15 px-3 py-2.5">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium"><Checkbox checked={allSelected} onCheckedChange={(checked)=>setSelectedIds(checked?[...availableIds]:[])}/>Select All</label>
+          <div className="flex items-center gap-3"><span className="text-xs font-medium text-muted-foreground">{selectedCount} of {actions.length} selected</span><Button type="button" size="sm" variant="ghost" disabled={!selectedCount} onClick={()=>setSelectedIds([])}>Clear All</Button></div>
+        </div>
+        <div className="min-h-0 overflow-auto rounded-lg border">
+          <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-muted/90 uppercase tracking-wide text-muted-foreground backdrop-blur"><tr>{["", "NC / Action ID", "5S Category", "Zone", "Responsible Zone Member", "Priority", "Status"].map((heading,index)=><th key={`${heading}-${index}`} className="whitespace-nowrap border-b px-3 py-2.5 font-semibold">{heading}</th>)}</tr></thead>
+            <tbody className="divide-y">{searchedActions.map((action)=><tr key={action.id} className="hover:bg-muted/20"><td className="px-3 py-3"><Checkbox checked={selectedIds.includes(action.id)} onCheckedChange={(checked)=>toggleAction(action.id,Boolean(checked))} aria-label={`Select ${action.id}`}/></td><td className="whitespace-nowrap px-3 py-3 font-mono font-semibold text-primary">{action.id}</td><td className="whitespace-nowrap px-3 py-3">{action.category??"—"}</td><td className="whitespace-nowrap px-3 py-3">{action.area}</td><td className="whitespace-nowrap px-3 py-3">{action.responsiblePersonName??action.assignedTo??"—"}</td><td className="whitespace-nowrap px-3 py-3">{action.priority}</td><td className="whitespace-nowrap px-3 py-3"><ActionStatusBadge status={action.status}/></td></tr>)}</tbody>
+          </table>
+          {!searchedActions.length&&<div className="grid min-h-32 place-items-center p-6 text-sm text-muted-foreground">No NC records match this search.</div>}
+        </div>
+      </div>
+      <DialogFooter className="shrink-0 border-t px-5 py-3 sm:px-6"><Button type="button" variant="outline" onClick={()=>onOpenChange(false)}>Cancel</Button><Button type="button" disabled={!selectedCount} onClick={exportSelected}><Download className="size-4"/>Export Selected ({selectedCount})</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
 }
 
 function EvidenceThumbnail({ evidence, onPreview }: { evidence?: MyActionEvidence; onPreview: (evidence: MyActionEvidence) => void }) {
@@ -630,14 +701,15 @@ function EvidenceThumbnail({ evidence, onPreview }: { evidence?: MyActionEvidenc
   return <button type="button" onClick={() => onPreview(evidence)} className="block size-12 overflow-hidden rounded-lg border transition hover:ring-2 hover:ring-primary/30"><img src={evidence.url} alt={evidence.name} className="size-full object-cover" /></button>;
 }
 
-function BeforeAfterView({ action, actions, onSelect, onPreview, onReport }: { action?: MyAction; actions: MyAction[]; onSelect: (id: string) => void; onPreview: (evidence: MyActionEvidence) => void; onReport: (action: MyAction) => void }) {
-  if (!action) return <Card><CardContent className="grid min-h-72 place-items-center text-sm text-muted-foreground">No non-compliance records are available for this view.</CardContent></Card>;
+function BeforeAfterView({ action, actions, memberFiltered, onClearMember, onSelect, onPreview, onReport }: { action?: MyAction; actions: MyAction[]; memberFiltered: boolean; onClearMember: () => void; onSelect: (id: string) => void; onPreview: (evidence: MyActionEvidence) => void; onReport: (action: MyAction) => void }) {
+  if (!action) return <Card><CardContent className="grid min-h-72 place-items-center text-center text-sm text-muted-foreground"><div><p>{memberFiltered ? "No Before / After evidence available for this Zone Member." : "No Before / After evidence is available for this view."}</p>{memberFiltered && <Button type="button" size="sm" variant="ghost" className="mt-3" onClick={onClearMember}>View all members</Button>}</div></CardContent></Card>;
   const before = action.issueEvidence?.find((item) => item.type === "image" && item.url);
   const after = action.evidence.find((item) => item.type === "image" && item.url);
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const previousTitle = document.title;
     document.title = `5S-Before-After-Report-${new Date().toISOString().slice(0, 10)}`;
     window.addEventListener("afterprint", () => { document.title = previousTitle; }, { once: true });
+    await prepareReportForPrint(".before-after-print-report");
     window.print();
   };
   return (
@@ -691,8 +763,26 @@ function formatDashboardDate(value?: string) { if (!value) return "—"; const d
 
 function csvCell(value: unknown) { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
 function exportNonComplianceCsv(actions: MyAction[]) {
-  const headings = ["Audit ID", "Date", "Zone", "5S Section", "Question", "Compliance Status", "Observation", "Responsible Person", "Action Status", "Priority", "Due Date"];
-  const rows = actions.map((action) => [action.auditId ?? action.sourceTitle, action.createdAt, action.area, action.category, action.questionText, action.status === "Completed" ? "Closed" : "Non-Compliance", action.originalFinding ?? action.description, action.responsiblePersonName ?? action.assignedTo, action.status, action.priority, action.dueDate]);
+  const headings = ["NC / Action ID", "Audit ID", "Audit Date", "5S Category", "Finding / Observation", "Zone", "Priority", "Responsible Zone Member", "Proposed Action", "Final Action Plan", "Status", "Due Date", "Zone Leader", "Reviewed By", "Review Date", "Closed By", "Closure Date"];
+  const rows = actions.map((action) => [
+    action.id,
+    action.auditId ?? action.sourceTitle,
+    action.createdAt,
+    action.category,
+    action.originalFinding ?? action.description,
+    action.area,
+    action.priority,
+    action.responsiblePersonName ?? action.assignedTo,
+    action.proposedAction ?? action.description,
+    action.actionPlan ?? action.proposedAction ?? action.description,
+    getActionStatusLabel(action.status),
+    action.dueDate,
+    action.zoneLeaderName,
+    action.reviewedByRole === "Zone Leader" ? action.reviewedBy : action.closedBy ?? action.zoneLeaderName,
+    action.reviewedAt,
+    action.closedBy ?? action.zoneLeaderName,
+    action.closedAt ?? action.completedAt,
+  ]);
   const csv = [headings, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
@@ -701,7 +791,7 @@ function exportNonComplianceCsv(actions: MyAction[]) {
 }
 
 function BeforeAfterPrintReport({ actions }: { actions: MyAction[] }) {
-  return <section className="before-after-print-report hidden bg-white text-slate-950 print:block"><header><p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">5S operational excellence</p><h1 className="mt-2 text-2xl font-bold">5S Before &amp; After Report</h1><p className="mt-1 text-sm text-slate-500">Generated {formatDashboardDate(new Date().toISOString())}</p></header><div className="mt-6 space-y-6">{actions.map((item) => { const before=item.issueEvidence?.find((e)=>e.type==="image"&&e.url); const after=item.evidence.find((e)=>e.type==="image"&&e.url); return <article key={item.id} className="before-after-print-pair break-inside-avoid rounded-lg border border-slate-300 p-4"><div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-700">{item.auditId ?? item.sourceTitle} · {item.area} · {item.category}</p><h2 className="mt-1 text-lg font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.originalFinding ?? item.description}</p></div><span className="text-sm font-semibold">{item.status}</span></div><div className="mt-4 grid grid-cols-2 gap-4">{[["Before",before],["After",after]].map(([label,evidence])=><div key={String(label)}><p className="mb-2 text-xs font-bold uppercase">{String(label)}</p>{typeof evidence === "object" && evidence?.url ? <img src={evidence.url} alt={evidence.name} className="aspect-[16/10] w-full rounded border object-contain" /> : <div className="grid aspect-[16/10] place-items-center rounded border bg-slate-50 text-sm text-slate-400">No image attached</div>}</div>)}</div><dl className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><dt className="text-slate-500">Responsible</dt><dd className="font-semibold">{item.responsiblePersonName ?? item.assignedTo ?? "—"}</dd></div><div><dt className="text-slate-500">Completed</dt><dd className="font-semibold">{formatDashboardDate(item.completedAt)}</dd></div><div><dt className="text-slate-500">Auditor / reviewer</dt><dd className="font-semibold">{item.reviewedBy ?? item.auditor ?? "—"}</dd></div><div><dt className="text-slate-500">Due date</dt><dd className="font-semibold">{formatDashboardDate(item.dueDate)}</dd></div></dl></article>; })}</div></section>;
+  return <section className="before-after-print-report hidden bg-white text-slate-950 print:block"><ReportHeader title="5S Before & After Report" metadata={<>Generated {formatDashboardDate(new Date().toISOString())}</>} className="px-0 pt-0" /><div className="mt-6 space-y-6">{actions.map((item) => { const before=item.issueEvidence?.find((e)=>e.type==="image"&&e.url); const after=item.evidence.find((e)=>e.type==="image"&&e.url); return <article key={item.id} className="before-after-print-pair break-inside-avoid rounded-lg border border-slate-300 p-4"><div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-700">{item.auditId ?? item.sourceTitle} · {item.area} · {item.category}</p><h2 className="mt-1 text-lg font-bold">{item.title}</h2><p className="mt-1 text-sm text-slate-600">{item.originalFinding ?? item.description}</p></div><span className="text-sm font-semibold">{item.status}</span></div><div className="mt-4 grid grid-cols-2 gap-4">{[["Before",before],["After",after]].map(([label,evidence])=><div key={String(label)}><p className="mb-2 text-xs font-bold uppercase">{String(label)}</p>{typeof evidence === "object" && evidence?.url ? <img src={evidence.url} alt={evidence.name} className="aspect-[16/10] w-full rounded border object-contain" /> : <div className="grid aspect-[16/10] place-items-center rounded border bg-slate-50 text-sm text-slate-400">No image attached</div>}</div>)}</div><dl className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><dt className="text-slate-500">Responsible</dt><dd className="font-semibold">{item.responsiblePersonName ?? item.assignedTo ?? "—"}</dd></div><div><dt className="text-slate-500">Completed</dt><dd className="font-semibold">{formatDashboardDate(item.closedAt ?? item.completedAt)}</dd></div><div><dt className="text-slate-500">Zone Leader / reviewer</dt><dd className="font-semibold">{item.reviewedByRole === "Zone Leader" ? item.reviewedBy ?? item.zoneLeaderName ?? "—" : item.closedBy ?? item.zoneLeaderName ?? "—"}</dd></div><div><dt className="text-slate-500">Due date</dt><dd className="font-semibold">{formatDashboardDate(item.dueDate)}</dd></div></dl></article>; })}</div></section>;
 }
 
-function ActionStatusBadge({ status }: { status: MyActionStatus }) { const variant = status === "Completed" ? "success" : status === "Overdue" || status === "Rework Required" ? "danger" : status === "In Progress" || status === "Pending Review" ? "warning" : "info"; return <Badge variant={variant}>{status}</Badge>; }
+function ActionStatusBadge({ status }: { status: MyActionStatus }) { const variant = status === "Completed" ? "success" : status === "Overdue" || status === "Rework Required" ? "danger" : status === "In Progress" || status === "Awaiting Review" ? "warning" : "info"; return <Badge variant={variant}>{getActionStatusLabel(status)}</Badge>; }

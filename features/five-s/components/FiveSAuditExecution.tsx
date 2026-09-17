@@ -35,16 +35,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   Card,
   CardContent,
   CardHeader,
@@ -68,7 +58,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import FiveSPageHeader from "./FiveSPageHeader";
-import AuditorSignaturePad from "./AuditorSignaturePad";
+import FinalAuditVerificationDialog, { type AuditVerificationCapture } from "./FinalAuditVerificationDialog";
 import FiveSReferenceGuide from "./FiveSReferenceGuide";
 import { useI18n } from "@/components/preferences/use-i18n";
 import { auditQuestionText, auditSectionDescription, auditSectionName } from "@/lib/audit-question-translations";
@@ -77,6 +67,7 @@ import { optimizeEvidenceImage, MAX_EVIDENCE_IMAGES } from "@/lib/evidence-image
 
 import { createAction, getActionById, updateAction } from "@/lib/actions/action-store";
 import { updateFiveSAudit } from "@/lib/five-s/audit-store";
+import { didRequiredAnswersBecomeComplete } from "@/lib/five-s/audit-completion";
 import { AUDIT_LIFECYCLE_STAGES } from "@/lib/five-s/lifecycle-status";
 import { useCurrentUser } from "@/lib/current-user";
 import {
@@ -95,7 +86,6 @@ import type {
   FiveSQuestionStatus,
   FiveSSection,
 } from "../types/five-s";
-import type { MyAction } from "../types/my-actions";
 
 interface FiveSAuditExecutionProps {
   audit: FiveSAudit;
@@ -113,6 +103,7 @@ interface QuestionState {
 
   actionTitle: string;
   actionDescription: string;
+  proposedAction: string;
   actionCategory: string;
 
   assignedTo: string;
@@ -248,6 +239,7 @@ function createInitialQuestionState(
 
     actionDescription:
       question.observation ?? "",
+    proposedAction: "",
     actionCategory: "",
 
     assignedTo: "",
@@ -305,7 +297,7 @@ function FiveSAuditExecution({
               (question, questionIndex) => ({
                 ...question,
 
-                ...(!question.referenceImage ? referenceFields(section.category, questionIndex) : {}),
+                ...(!question.reference ? referenceFields(section.category, questionIndex) : {}),
 
                 evidence:
                   question.evidence ?? [],
@@ -378,6 +370,7 @@ function FiveSAuditExecution({
     showReview,
     setShowReview,
   ] = useState(false);
+  const [showQuestionsCompleted, setShowQuestionsCompleted] = useState(false);
 
   const [
     saving,
@@ -387,7 +380,6 @@ function FiveSAuditExecution({
   const [hasSavedDraft, setHasSavedDraft] = useState(
     audit.status === "Draft" && audit.completionPercentage > 0
   );
-  const [auditorSignature, setAuditorSignature] = useState(audit.auditorSignature);
   const [fullScreen, setFullScreen] = useState(false);
 
   const [
@@ -396,8 +388,6 @@ function FiveSAuditExecution({
   ] = useState(false);
 
   const [showCompleteConfirmation, setShowCompleteConfirmation] =
-    useState(false);
-  const [showOpenActionsWarning, setShowOpenActionsWarning] =
     useState(false);
 
   const [
@@ -504,12 +494,6 @@ function FiveSAuditExecution({
 
   const auditReadyForCompletion =
     allQuestions.length > 0 && answeredQuestions === allQuestions.length;
-  const auditActions = allQuestions
-    .map((question) => questionStates[question.id]?.actionId)
-    .filter((actionId): actionId is string => Boolean(actionId))
-    .map((actionId) => getActionById(actionId))
-    .filter((action): action is MyAction => Boolean(action));
-  const openAuditActions = auditActions.filter((action) => action.status !== "Completed");
   const isFinalQuestion = Boolean(
     activeSection &&
     activeSectionIndex === sections.length - 1 &&
@@ -644,12 +628,31 @@ function FiveSAuditExecution({
       return;
     }
 
+    const becameReadyForReview = didRequiredAnswersBecomeComplete(
+      allQuestions.map((question) => question.id),
+      completionSnapshotRef.current,
+      snapshot,
+    );
     const activeId = activeSection?.questions[activeQuestionIndex]?.id;
     const activeScore = activeId ? questionStates[activeId]?.score : null;
     const justCompleted = Boolean(
       activeId && snapshot[activeId] && !completionSnapshotRef.current[activeId]
     );
     completionSnapshotRef.current = snapshot;
+
+    if (becameReadyForReview) {
+      const status = audit.status === "In Progress" ? "In Progress" : "Draft";
+      updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
+      setHasSavedDraft(true);
+      setShowQuestionsCompleted(true);
+
+      const reviewTimer = window.setTimeout(() => {
+        setShowQuestionsCompleted(false);
+        setShowReview(true);
+      }, 400);
+
+      return () => window.clearTimeout(reviewTimer);
+    }
 
     if (!justCompleted || !activeSection || activeScore !== 2) return;
 
@@ -693,6 +696,9 @@ function FiveSAuditExecution({
     }, 210);
 
     return () => window.clearTimeout(timer);
+    // This effect intentionally evaluates the committed answer snapshot. Adding
+    // render-local helpers would retrigger it without an answer-state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeQuestionIndex, activeSection, activeSectionIndex, allQuestions, fullScreen, questionStates, sections]);
 
   /**
@@ -872,6 +878,7 @@ function FiveSAuditExecution({
       updateQuestionState(question.id, {
         actionTitle: existingAction.title,
         actionDescription: synchronizedDescription,
+        proposedAction: existingAction.proposedAction ?? existingAction.actionPlan ?? existingAction.description,
         observation: synchronizedDescription,
         actionCategory: existingAction.actionCategory ?? "",
         priority: existingAction.priority,
@@ -920,6 +927,7 @@ function FiveSAuditExecution({
 
     if (
       !state.actionTitle.trim() ||
+      !state.proposedAction.trim() ||
       !state.actionCategory ||
       !state.dueDate ||
       state.dueDate < today ||
@@ -963,6 +971,11 @@ function FiveSAuditExecution({
       updateAction(state.actionId, {
         title,
         description,
+        proposedAction: state.proposedAction.trim(),
+        proposedActionByUserId: existingAction.proposedActionByUserId ?? currentUser.id,
+        proposedActionByName: existingAction.proposedActionByName ?? currentUser.name,
+        proposedActionAt: existingAction.proposedActionAt ?? new Date().toISOString(),
+        actionPlan: state.proposedAction.trim(),
         actionCategory: state.actionCategory,
         priority: state.priority,
         dueDate: state.dueDate,
@@ -983,6 +996,11 @@ function FiveSAuditExecution({
 
         title,
         description,
+        proposedAction: state.proposedAction.trim(),
+        proposedActionByUserId: currentUser.id,
+        proposedActionByName: currentUser.name,
+        proposedActionAt: new Date().toISOString(),
+        actionPlan: state.proposedAction.trim(),
 
         source: "5S Audit",
 
@@ -1439,14 +1457,31 @@ function FiveSAuditExecution({
     router.push(`/5s/audits/${encodeURIComponent(audit.id)}/report?from=audit`);
   }
 
-  function handleCompleteAudit() {
-    if (!auditReadyForCompletion || !auditorSignature) return;
+  function handleCompleteAudit(verification: AuditVerificationCapture) {
+    if (!auditReadyForCompletion) return;
+
+    const completedAt = new Date().toISOString();
+    const auditorVerification = {
+      auditorId: currentUser.id,
+      auditorName: currentUser.name,
+      capturedAt: verification.capturedAt,
+      photo: verification.photo,
+      signature: verification.signature,
+    };
 
     const completedAudit = buildCurrentAudit({
       status: "Completed",
       completionPercentage: 100,
-      completedAt: new Date().toISOString(),
-      auditorSignature,
+      completedAt,
+      completedByUserId: currentUser.id,
+      completedByName: currentUser.name,
+      auditorVerification,
+      auditorSignature: {
+        userId: currentUser.id,
+        userName: currentUser.name,
+        signedAt: verification.capturedAt,
+        signatureImage: verification.signature,
+      },
     });
 
     updateFiveSAudit(audit.id, completedAudit);
@@ -1456,26 +1491,11 @@ function FiveSAuditExecution({
     );
 
     setShowCompleteConfirmation(false);
-    router.push("/5s/audits");
+    router.push(`/5s/audits/${encodeURIComponent(audit.id)}/report?from=audit`);
   }
 
   function requestAuditCompletion() {
-    if (openAuditActions.length > 0) {
-      setShowOpenActionsWarning(true);
-      return;
-    }
     setShowCompleteConfirmation(true);
-  }
-
-  function handleSignatureConfirm(signatureImage: string) {
-    const signature = { userId: currentUser.id, userName: audit.auditor, signedAt: new Date().toISOString(), signatureImage };
-    setAuditorSignature(signature);
-    updateFiveSAudit(audit.id, buildCurrentAudit({ auditorSignature: signature }));
-  }
-
-  function handleSignatureClear() {
-    setAuditorSignature(undefined);
-    updateFiveSAudit(audit.id, buildCurrentAudit({ auditorSignature: undefined }));
   }
 
   /**
@@ -1533,7 +1553,7 @@ function FiveSAuditExecution({
                 onClick={requestAuditCompletion}
               >
                 <CheckCircle2 className="mr-2 size-4" />
-                {t("audit.complete")}
+                Submit Audit
               </Button>
             </div>
           </div>
@@ -1798,17 +1818,13 @@ function FiveSAuditExecution({
               saving={actionSaving}
             />
           )}
-        <CompleteAuditDialog
+        <FinalAuditVerificationDialog
           open={showCompleteConfirmation}
           questionCount={allQuestions.length}
           auditor={audit.auditor}
-          signature={auditorSignature}
           onOpenChange={setShowCompleteConfirmation}
-          onSignatureConfirm={handleSignatureConfirm}
-          onSignatureClear={handleSignatureClear}
-          onConfirm={handleCompleteAudit}
+          onComplete={handleCompleteAudit}
         />
-        <OpenAuditActionsDialog open={showOpenActionsWarning} actions={openAuditActions} onOpenChange={setShowOpenActionsWarning} onOpenAction={(actionId) => router.push(`/5s/actions/${encodeURIComponent(actionId)}`)} />
       </div>
     );
   }
@@ -1821,6 +1837,12 @@ function FiveSAuditExecution({
 
   return (
     <div className={fullScreen ? "fixed inset-0 z-[60] flex h-[100dvh] w-screen min-w-0 flex-col overflow-hidden bg-background motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-[0.99] motion-safe:duration-200" : "flex w-full min-w-0 max-w-full flex-col md:h-[calc(100dvh-7rem)] md:min-h-0"}>
+      {showQuestionsCompleted && (
+        <div className="pointer-events-none fixed left-1/2 top-5 z-[120] flex -translate-x-1/2 items-center gap-2 rounded-full border border-emerald-200 bg-background/95 px-4 py-2 text-sm font-semibold text-emerald-700 shadow-lg backdrop-blur dark:border-emerald-900 dark:text-emerald-400" role="status" aria-live="polite">
+          <CheckCircle2 className="size-4" aria-hidden="true" />
+          All questions completed
+        </div>
+      )}
       {/* FIXED HEADER */}
 
       {!fullScreen && <div className="w-full min-w-0 max-w-full shrink-0 border-b bg-background px-0 pt-3 md:px-6 lg:px-8">
@@ -1848,7 +1870,7 @@ function FiveSAuditExecution({
                 </Button>
                 <Button type="button" onClick={requestAuditCompletion}>
                   <CheckCircle2 className="mr-2 size-4" />
-                  {t("audit.complete")}
+                  Submit Audit
                 </Button>
               </>
             ) : (
@@ -2278,7 +2300,7 @@ function FiveSAuditExecution({
                                       <div className="min-w-0"><dt className="text-muted-foreground">Responsible</dt><dd className="mt-0.5 truncate font-medium">{createdAction.responsiblePersonName || createdAction.assignedTo || createdAction.zoneLeaderName || "Unassigned"}</dd></div>
                                       <div><dt className="text-muted-foreground">Priority</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.priority === "Critical" || createdAction.priority === "High" ? "danger" : createdAction.priority === "Medium" ? "warning" : "info"}>{createdAction.priority}</Badge></dd></div>
                                       <div><dt className="text-muted-foreground">Due</dt><dd className="mt-0.5 font-medium">{new Date(`${createdAction.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</dd></div>
-                                      <div><dt className="text-muted-foreground">Status</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.status === "Completed" ? "success" : createdAction.status === "Overdue" || createdAction.status === "Rework Required" ? "danger" : createdAction.status === "In Progress" || createdAction.status === "Pending Review" ? "warning" : "info"}>{createdAction.status}</Badge></dd></div>
+                                      <div><dt className="text-muted-foreground">Status</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.status === "Completed" ? "success" : createdAction.status === "Overdue" || createdAction.status === "Rework Required" ? "danger" : createdAction.status === "In Progress" || createdAction.status === "Awaiting Review" ? "warning" : "info"}>{createdAction.status}</Badge></dd></div>
                                       {createdAction.actionCategory && <div className="min-w-0"><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 truncate font-medium">{createdAction.actionCategory}</dd></div>}
                                       {createdAction.issueEvidence?.length ? <div><dt className="text-muted-foreground">Evidence</dt><dd className="mt-0.5 font-medium">{createdAction.issueEvidence.length} attached</dd></div> : null}
                                     </dl>
@@ -2502,7 +2524,7 @@ function FiveSAuditExecution({
           {isFinalQuestion ? (
             <Button type="button" disabled={!auditReadyForCompletion || !isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={requestAuditCompletion}>
               <CheckCircle2 className="size-4" />
-              Complete Audit
+              Submit Audit
             </Button>
           ) : (
             <Button type="button" disabled={!isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={() => navigateQuestion(1)}>Save &amp; Next <span aria-hidden="true">→</span></Button>
@@ -2689,62 +2711,15 @@ function FiveSAuditExecution({
         </DialogContent>
       </Dialog>
 
-      <CompleteAuditDialog
+      <FinalAuditVerificationDialog
         open={showCompleteConfirmation}
         questionCount={allQuestions.length}
         auditor={audit.auditor}
-        signature={auditorSignature}
         onOpenChange={setShowCompleteConfirmation}
-        onSignatureConfirm={handleSignatureConfirm}
-        onSignatureClear={handleSignatureClear}
-        onConfirm={handleCompleteAudit}
+        onComplete={handleCompleteAudit}
       />
-      <OpenAuditActionsDialog open={showOpenActionsWarning} actions={openAuditActions} onOpenChange={setShowOpenActionsWarning} onOpenAction={(actionId) => router.push(`/5s/actions/${encodeURIComponent(actionId)}`)} />
 
     </div>
-  );
-}
-
-function OpenAuditActionsDialog({open,actions,onOpenChange,onOpenAction}:{open:boolean;actions:MyAction[];onOpenChange:(open:boolean)=>void;onOpenAction:(actionId:string)=>void}) {
-  return <AlertDialog open={open} onOpenChange={onOpenChange}><AlertDialogContent className="max-h-[calc(100dvh-1.5rem)] sm:max-w-xl"><AlertDialogHeader><AlertDialogTitle>Open actions must be completed</AlertDialogTitle><AlertDialogDescription>This audit cannot be completed while corrective actions from this audit are still open. Review and complete the actions below, then return to complete the audit.</AlertDialogDescription></AlertDialogHeader><div className="grid max-h-[50dvh] gap-2 overflow-y-auto pr-1">{actions.map(action=><div key={action.id} className="flex min-w-0 flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex min-w-0 flex-wrap items-center gap-2"><span className="font-mono text-xs font-semibold text-primary">{action.id}</span><Badge size="sm" variant={action.status==="Overdue"||action.status==="Rework Required"?"danger":action.status==="In Progress"||action.status==="Pending Review"||action.status==="Pending Auditor Review"||action.status==="Awaiting Review"?"warning":"info"}>{action.status}</Badge></div><p className="mt-1 truncate text-sm font-semibold" title={action.title}>{action.title}</p><p className="mt-1 text-xs text-muted-foreground">{action.sectionId??action.category??"Audit finding"} · Responsible: {action.responsiblePersonName||action.assignedTo||action.zoneLeaderName||"Unassigned"}</p></div><Button type="button" size="sm" variant="outline" className="shrink-0" onClick={()=>onOpenAction(action.id)}><Eye className="size-4"/>Open Action</Button></div>)}</div><AlertDialogFooter><AlertDialogCancel>Return to Audit</AlertDialogCancel></AlertDialogFooter></AlertDialogContent></AlertDialog>
-}
-
-function CompleteAuditDialog({
-  open,
-  questionCount,
-  auditor,
-  signature,
-  onOpenChange,
-  onSignatureConfirm,
-  onSignatureClear,
-  onConfirm,
-}: {
-  open: boolean;
-  questionCount: number;
-  auditor: string;
-  signature?: FiveSAudit["auditorSignature"];
-  onOpenChange: (open: boolean) => void;
-  onSignatureConfirm: (signatureImage: string) => void;
-  onSignatureClear: () => void;
-  onConfirm: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-h-[calc(100dvh-1.5rem)] max-w-3xl overflow-y-auto overscroll-contain">
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t("signature.title")}</AlertDialogTitle>
-          <AlertDialogDescription>
-            All {questionCount} questions are complete. Sign below to approve the audit, then select Complete Audit.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AuditorSignaturePad auditor={auditor} signature={signature} onConfirm={onSignatureConfirm} onClear={onSignatureClear} />
-        <AlertDialogFooter>
-          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction disabled={!signature} onClick={onConfirm}>{t("audit.complete")}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }
 
@@ -2908,6 +2883,26 @@ function ActionDialog({
               />
             </div>
 
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-medium" htmlFor={`proposed-action-${question.id}`}>
+                  Proposed Action <span className="text-destructive">*</span>
+                </label>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{state.proposedAction.length} / 500</span>
+              </div>
+              <Textarea
+                id={`proposed-action-${question.id}`}
+                value={state.proposedAction}
+                maxLength={500}
+                rows={4}
+                onChange={(event) => onUpdate({ proposedAction: event.target.value })}
+                placeholder="Recommend what should be done to correct this finding..."
+                className="mt-1.5 min-h-24"
+                disabled={!canEditCreatedAction}
+              />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">Recommend the corrective action required for this finding.</p>
+            </div>
+
             <div className={`rounded-lg border p-4 ${requiresAction && state.evidence.length === 0 ? "border-destructive/45 bg-destructive/[0.035]" : "bg-muted/10"}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -3032,6 +3027,7 @@ function ActionDialog({
               disabled={
                 saving ||
                 !state.actionTitle.trim() ||
+                !state.proposedAction.trim() ||
                 !state.actionCategory ||
                 dueDateInvalid ||
                 (requiresAction && state.evidence.length === 0)

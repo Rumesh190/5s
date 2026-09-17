@@ -11,6 +11,7 @@ import { useFiveSAuditStore } from "@/lib/five-s/audit-store";
 import { useI18n } from "@/components/preferences/use-i18n";
 import type { FiveSEvidence, FiveSQuestion } from "../types/five-s";
 import type { MyAction } from "../types/my-actions";
+import ReportHeader from "./ReportHeader";
 
 const SCORE_LABELS: Record<number, string> = {
   0: "Non Compliance",
@@ -112,7 +113,7 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
   const actionCounts = {
     open: actions.filter((action) => ["Awaiting Assignment", "Assigned", "Open"].includes(action.status)).length,
     inProgress: actions.filter((action) => action.status === "In Progress").length,
-    pendingReview: actions.filter((action) => ["Pending Review", "Pending Auditor Review", "Awaiting Review"].includes(action.status)).length,
+    pendingReview: actions.filter((action) => action.status === "Awaiting Review").length,
     rework: actions.filter((action) => action.status === "Rework Required").length,
     overdue: actions.filter((action) => action.status === "Overdue").length,
     closed: actions.filter((action) => action.status === "Completed").length,
@@ -141,17 +142,13 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
       </div>
 
       <article className="audit-report-document mx-auto min-w-0 max-w-[1120px] space-y-5 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:space-y-7 sm:p-8">
-        <header className="flex flex-col justify-between gap-5 border-b-2 border-slate-900 pb-5 dark:border-slate-200 sm:flex-row sm:items-end">
-          <div>
-            <p className="text-xs font-bold tracking-[0.18em] text-primary">{t("reports.auditReport")}</p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight">{audit.title}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{audit.plant} · {audit.area}</p>
-          </div>
-          <div className="text-left text-xs text-muted-foreground sm:text-right">
-            <p>{t("reports.reportGenerated")}</p>
-            <p className="mt-1 font-medium text-foreground">{generatedAt}</p>
-          </div>
-        </header>
+        <ReportHeader
+          title={t("reports.auditReport")}
+          reportId={audit.title}
+          subtitle={`${audit.plant} · ${audit.area}`}
+          metadata={<><span>{t("reports.reportGenerated")}</span><span className="ml-2 font-medium text-slate-800">{generatedAt}</span></>}
+          className="-mx-4 -mt-4 border-b-2 border-slate-900 sm:-mx-8 sm:-mt-8"
+        />
 
         <ReportSection title={t("reports.auditSummary")}>
           <div className="audit-summary-grid grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
@@ -181,7 +178,7 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           <dl className="audit-details-grid grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             {[
               ["Plant", audit.plant], ["Zone", audit.area], ["Zone Leader", zoneLeader],
-              ["Auditor", audit.auditor], ["Status", displayStatus],
+              ["Auditor", audit.auditor], ["Completed By", audit.completedByName ?? audit.auditor], ["Status", displayStatus],
               [t("common.started"), formatDateTime(audit.startedAt, locale)], [t("common.completed"), formatDateTime(audit.completedAt, locale)],
               [t("audit.dueDate"), formatDateTime(audit.dueDate, locale)],
             ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
@@ -234,7 +231,8 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
             const relatedQuestion = questions.find((question) => question.actionId === action.id);
             return <article key={action.id} className="audit-report-block rounded-lg border border-slate-200 p-4 dark:border-slate-700">
               <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-muted-foreground">{action.id}</p><h3 className="mt-1 text-sm font-semibold">{action.title}</h3></div><Badge variant="outline">{action.status}</Badge></div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{action.description}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground"><span className="font-semibold text-foreground">Proposed Action:</span> {action.proposedAction ?? action.description}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground"><span className="font-semibold text-foreground">Final Action Plan:</span> {action.actionPlan ?? action.proposedAction ?? action.description}</p>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
                 <div><dt className="text-muted-foreground">Category</dt><dd className="font-medium">{action.actionCategory ?? action.category ?? "—"}</dd></div>
                 <div><dt className="text-muted-foreground">Priority</dt><dd className="font-medium">{action.priority}</dd></div>
@@ -266,11 +264,11 @@ export default function FiveSAuditReport({ auditId, origin, returnTo }: { auditI
           ))}</div>
         </ReportSection>}
 
-        {audit.auditorSignature && <ReportSection title={t("signature.title")}>
-          <div className="audit-report-block grid items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50 sm:grid-cols-[1fr_260px_1fr]">
-            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Signed By</p><p className="mt-1 text-sm font-semibold">{audit.auditorSignature.userName}</p><p className="mt-1 text-xs text-muted-foreground">Auditor</p></div>
-            <img src={audit.auditorSignature.signatureImage} alt={`${audit.auditorSignature.userName} auditor signature`} className="h-24 w-full rounded-md border bg-white object-contain p-2" />
-            <div className="sm:text-right"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("signature.signedOn")}</p><p className="mt-1 text-sm font-semibold">{formatDateTime(audit.auditorSignature.signedAt, locale)}</p></div>
+        {(audit.auditorVerification || audit.auditorSignature) && <ReportSection title="Audit Completion">
+          <div className="audit-report-block grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50 sm:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)] sm:items-center">
+            {audit.auditorVerification ? <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Auditor Verification</p><img src={audit.auditorVerification.photoUrl ?? audit.auditorVerification.photo} alt={`${audit.auditorVerification.auditorName} live verification`} className="mt-2 aspect-[4/3] w-full rounded-lg border bg-white object-cover" /></div> : <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Completed By</p><p className="mt-1 text-sm font-semibold">{audit.completedByName ?? audit.auditorSignature?.userName ?? audit.auditor}</p><p className="mt-1 text-xs text-muted-foreground">Auditor</p></div>}
+            <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Digital Signature</p><img src={audit.auditorVerification?.signatureUrl ?? audit.auditorVerification?.signature ?? audit.auditorSignature?.signatureImage} alt={`${audit.auditorVerification?.auditorName ?? audit.auditorSignature?.userName ?? audit.auditor} auditor signature`} className="mt-2 h-24 w-full rounded-md border bg-white object-contain p-2" /></div>
+            <div className="sm:text-right"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Completed By</p><p className="mt-1 text-sm font-semibold">{audit.completedByName ?? audit.auditorVerification?.auditorName ?? audit.auditorSignature?.userName ?? audit.auditor}</p><p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Verified At</p><p className="mt-1 text-sm font-semibold">{formatDateTime(audit.auditorVerification?.capturedAt ?? audit.auditorSignature?.signedAt, locale)}</p></div>
           </div>
         </ReportSection>}
 

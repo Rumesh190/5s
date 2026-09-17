@@ -4,19 +4,19 @@ export type MyActionStatus =
   | "Open"
   | "In Progress"
   | "Overdue"
-  | "Pending Review"
-  | "Pending Auditor Review"
   | "Awaiting Review"
   | "Rework Required"
   | "Completed";
 
 export type MyActionActivityType =
   | "created"
+  | "proposed"
   | "awaiting_assignment"
   | "assigned"
   | "started"
   | "submitted"
   | "resubmitted"
+  | "review_requested"
   | "reviewed"
   | "sent_back"
   | "closed";
@@ -26,6 +26,7 @@ export interface MyActionActivity {
   type: MyActionActivityType;
   actorId: string;
   actorName: string;
+  actorRole?: "Auditor" | "Zone Leader" | "Zone Member";
   createdAt: string;
   remark?: string;
 }
@@ -36,8 +37,7 @@ export type MyActionPriority =
   | "High"
   | "Critical";
 
-export type MyActionSource =
-  "5S Audit";
+export type MyActionSource = "5S Audit" | "Red Tag";
 
 export interface MyActionEvidence {
   id: string;
@@ -72,6 +72,9 @@ export interface MyAction {
 
   source: MyActionSource;
   sourceTitle: string;
+  /** Cross-module origin used to prevent duplicate canonical actions. */
+  sourceModule?: "5S Audit" | "Red Tag";
+  sourceId?: string;
 
   category?: string;
 
@@ -82,6 +85,18 @@ export interface MyAction {
   improvementTheme?: string;
   improvementClassification?: "Basic Improvement" | "Improvement Case" | "Trouble / Corrective Case";
   originalFinding?: string;
+
+  /** Auditor-authored recommendation captured with the finding. */
+  proposedAction?: string;
+  proposedActionByUserId?: string;
+  proposedActionByName?: string;
+  proposedActionAt?: string;
+
+  /** Final plan approved by the Zone Leader for the responsible person. */
+  actionPlan?: string;
+  actionPlanEditedByUserId?: string;
+  actionPlanEditedByName?: string;
+  actionPlanEditedAt?: string;
 
   plant: string;
   department: string;
@@ -99,10 +114,7 @@ export interface MyAction {
   createdByUserId?: string;
   createdByName?: string;
 
-  /**
-   * Auditor responsible for verifying the completed action.
-   * Optional so existing/demo actions continue to work.
-   */
+  /** Legacy creator/auditor identity retained for display and compatibility. */
   auditor?: string;
 
   status: MyActionStatus;
@@ -113,7 +125,7 @@ export interface MyAction {
 
   /**
    * Description entered by the responsible person
-   * before submitting the action for auditor review.
+   * before submitting the action for Zone Leader review.
    */
   actionTakenDescription?: string;
   resolutionObservation?: string;
@@ -122,15 +134,21 @@ export interface MyAction {
 
   /**
    * Date the responsible person submitted the action
-   * to the auditor for verification.
+   * to the Zone Leader for verification.
    */
   submittedForReviewAt?: string;
 
   /**
-   * Final auditor verification details.
+   * Final Zone Leader review and closure details. Role fields are optional for
+   * older browser records created before reviewer ownership was normalized.
    */
   reviewedAt?: string;
   reviewedBy?: string;
+  reviewedByRole?: "Zone Leader";
+  reviewComment?: string;
+  closedBy?: string;
+  closedByRole?: "Zone Leader";
+  closedAt?: string;
 
   completedAt?: string;
   completedByUserId?: string;

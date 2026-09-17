@@ -3,6 +3,25 @@ export type StorageResult = { success: true } | { success: false; reason: Storag
 
 export const STORAGE_FULL_MESSAGE = "Unable to save because browser storage is full. Remove an older demo record or a large attachment and try again.";
 
+export function readStorageString(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try { return window.localStorage.getItem(key); }
+  catch (error) { console.error(`Unable to read ${key}:`, error); return null; }
+}
+
+export function readStorageJson<T>(key: string): T | null {
+  const value = readStorageString(key);
+  if (!value) return null;
+  try { return JSON.parse(value) as T; }
+  catch (error) { console.error(`Unable to parse ${key}:`, error); return null; }
+}
+
+export function removeStorage(key: string): StorageResult {
+  if (typeof window === "undefined") return { success: false, reason: "unavailable", message: "Browser storage is unavailable." };
+  try { window.localStorage.removeItem(key); return { success: true }; }
+  catch (error) { console.error(`Unable to remove ${key}:`, error); return { success: false, reason: "unknown", message: "Unable to clear browser storage." }; }
+}
+
 function isQuotaError(error: unknown) {
   return error instanceof DOMException && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED" || error.code === 22 || error.code === 1014);
 }
@@ -21,7 +40,30 @@ export function safeSetStorageString(key: string, value: string): StorageResult 
 
 export function cleanupObsoleteDemoStorage() {
   if (typeof window === "undefined") return;
-  ["five-s-ci-create-draft", "five-s-temporary-evidence", "standalone-5s-upload-previews"].forEach((key) => window.localStorage.removeItem(key));
+  ["five-s-ci-create-draft", "five-s-temporary-evidence", "standalone-5s-upload-previews"].forEach(removeStorage);
+}
+
+export const DEMO_STORAGE_KEYS = [
+  "manufacturing-qms-five-s-audits-v1",
+  "manufacturing-qms-five-s-next-audit-number-v1",
+  "standalone-5s-audit-sequences-v2",
+  "standalone-5s-audit-fixture-version",
+  "standalone-5s-actions",
+  "standalone-5s-action-fixture-version",
+  "five-s-red-tags-v1",
+  "five-s-continuous-improvements-v1",
+  "five-s-administration-users-v1",
+  "standalone-5s-notifications",
+  "standalone-5s-notification-fixture-version",
+] as const;
+
+/** Development/demo utility. A reload is required to reset module-level snapshots. */
+export function resetStandaloneFiveSDemo(reload = true) {
+  if (typeof window === "undefined") return false;
+  DEMO_STORAGE_KEYS.forEach(removeStorage);
+  cleanupObsoleteDemoStorage();
+  if (reload) window.location.reload();
+  return true;
 }
 
 export function getApproximateStorageUsage() {

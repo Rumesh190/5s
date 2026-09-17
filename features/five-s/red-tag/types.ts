@@ -7,15 +7,18 @@ export const RED_TAG_SECTIONS = [
   "Production", "Assembly", "Quality", "Maintenance", "Stores", "Warehouse", "Utilities", "Office", "Other",
 ] as const;
 
-export type RedTagStatus = "Open" | "In Progress" | "Resolved" | "Closed";
+export type RedTagStatus = "Open" | "Assigned" | "In Progress" | "Awaiting Review" | "Rework Required" | "Closed";
+export type RedTagPriority = "Low" | "Medium" | "High" | "Critical";
 export type RedTagReason = (typeof RED_TAG_REASONS)[number];
 
 export interface RedTagHistoryEvent {
   id: string;
-  type: "created" | "printed" | "started" | "resolved" | "closed";
+  type: "created" | "printed" | "planned" | "assigned" | "started" | "submitted" | "resubmitted" | "rework" | "closed";
   label: string;
   actor: string;
+  actorRole?: "Auditor" | "Zone Leader" | "Zone Member";
   at: string;
+  comment?: string;
 }
 
 export interface RedTag {
@@ -39,4 +42,28 @@ export interface RedTag {
   createdAt: string;
   imageUrl?: string;
   history: RedTagHistoryEvent[];
+  /** New closure workflow fields are optional so legacy localStorage remains readable. */
+  actionPlan?: string;
+  priority?: RedTagPriority;
+  dueDate?: string;
+  instructions?: string;
+  actionId?: string;
+  zoneLeaderId?: string;
+  zoneLeaderName?: string;
+  assignedById?: string;
+  assignedByName?: string;
+  assignedAt?: string;
+  closureImageUrl?: string;
+  closureEvidenceHistory?: Array<{ imageUrl: string; comment: string; submittedByName: string; submittedAt: string }>;
+  completionComment?: string;
+  submittedById?: string;
+  submittedByName?: string;
+  submittedAt?: string;
+  reviewComment?: string;
+  reviewedBy?: string;
+  reviewedByRole?: "Zone Leader";
+  reviewedAt?: string;
+  closedBy?: string;
+  closedByRole?: "Zone Leader";
+  closedAt?: string;
 }

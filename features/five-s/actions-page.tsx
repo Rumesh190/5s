@@ -23,7 +23,6 @@ import {
   Search,
   Target,
   Trash2,
-  Upload,
   History,
   IndianRupee,
   Maximize2,
@@ -49,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { PageContainer } from "@/components/layout/page-container";
 import FiveSPageHeader from "./components/FiveSPageHeader";
+import AfterPhotoCaptureDialog from "./components/AfterPhotoCaptureDialog";
 import { StatCard } from "@/components/ui/stat-card";
 
 import {
@@ -61,8 +61,8 @@ import {
   useActionStore,
 } from "@/lib/actions/action-store";
 import { useCurrentUser } from "@/lib/current-user";
-import { FIVE_S_CORRECTIVE_ACTION_CATEGORIES } from "@/lib/five-s/configuration";
-import { MAX_EVIDENCE_IMAGES, optimizeEvidenceImage } from "@/lib/evidence-images";
+import { FIVE_S_CORRECTIVE_ACTION_CATEGORIES, getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
+import { MAX_EVIDENCE_IMAGES } from "@/lib/evidence-images";
 import { ACTION_LIFECYCLE_STAGES, getActionLifecycleStage, type ActionLifecycleStage } from "@/lib/five-s/lifecycle-status";
 
 import type {
@@ -92,7 +92,6 @@ const STATUS_CONFIG: Record<
   }
 > = {
   "Awaiting Assignment": { label: "Awaiting Assignment", variant: "warning" },
-  "Pending Auditor Review": { label: "Pending Auditor Review", variant: "info" },
   Open: {
     label: "Open",
     variant: "info",
@@ -114,7 +113,6 @@ const STATUS_CONFIG: Record<
   },
 
   Assigned: { label: "Assigned", variant: "info" },
-  "Pending Review": { label: "Pending Review", variant: "info" },
   "Rework Required": { label: "Rework Required", variant: "danger" },
 
   Completed: {
@@ -172,10 +170,12 @@ export default function MyActionsPage() {
   const currentUser = useCurrentUser();
   const actions = useActionStore();
   const roleActions = useMemo(() => actions.filter((action) => {
-    if (currentUser.id === "USR-LAKSHMAN") return action.createdByUserId === currentUser.id || action.createdByName === currentUser.name || action.auditor === currentUser.name;
-    if (currentUser.id === "USR-RUMESH") return action.area === currentUser.primaryZone;
-    return action.responsiblePersonId === currentUser.id || action.responsiblePersonName === currentUser.name || action.assignedTo === currentUser.name;
-  }), [actions, currentUser.id, currentUser.name, currentUser.primaryZone]);
+    const zoneLeaderId = action.zoneLeaderId ?? getFiveSZoneConfiguration(action.area)?.leaderId;
+    const isAuditor = action.createdByUserId === currentUser.id || action.createdByName === currentUser.name || action.auditor === currentUser.name;
+    const isZoneLeader = zoneLeaderId === currentUser.id;
+    const isResponsible = action.responsiblePersonId === currentUser.id || action.responsiblePersonName === currentUser.name || action.assignedTo === currentUser.name;
+    return isAuditor || isZoneLeader || isResponsible;
+  }), [actions, currentUser.id, currentUser.name]);
 
   const [selectedAction, setSelectedAction] =
     useState<MyAction | null>(null);
@@ -195,21 +195,11 @@ export default function MyActionsPage() {
   const [sendBackRemark, setSendBackRemark] = useState("");
   const [showSendBack, setShowSendBack] = useState(false);
   const [previewEvidence, setPreviewEvidence] = useState<MyActionEvidence | null>(null);
+  const [afterCameraOpen, setAfterCameraOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   const [showPriorityGuide, setShowPriorityGuide] =
     useState(false);
-
-  /*
-   * Evidence inputs:
-   * 1. File browser
-   * 2. Camera
-   */
-  const fileInputRef =
-    useRef<HTMLInputElement | null>(null);
-
-  const cameraInputRef =
-    useRef<HTMLInputElement | null>(null);
 
   /* =========================================================
      LOCK BODY SCROLL + ESCAPE HANDLER
@@ -270,9 +260,7 @@ export default function MyActionsPage() {
   ).length;
 
   const awaitingReviewActions = roleActions.filter(
-    (action) =>
-      action.status === "Awaiting Review"
-      || action.status === "Pending Review" || action.status === "Pending Auditor Review"
+    (action) => action.status === "Awaiting Review"
   ).length;
 
   const completedActions = roleActions.filter(
@@ -341,6 +329,7 @@ export default function MyActionsPage() {
      ========================================================= */
 
   function handleCloseAction() {
+    setAfterCameraOpen(false);
     setSelectedAction(null);
     setActionTakenDescription("");
     setActionCategory("");
@@ -363,7 +352,7 @@ export default function MyActionsPage() {
   }
 
   /* =========================================================
-     SUBMIT ACTION FOR AUDITOR REVIEW
+     SUBMIT ACTION FOR ZONE LEADER REVIEW
      ========================================================= */
 
   function handleCompleteAction(actionId: string) {
@@ -383,7 +372,7 @@ export default function MyActionsPage() {
   }
 
   /* =========================================================
-     AUDITOR REVIEW
+     ZONE LEADER REVIEW
      ========================================================= */
 
   function handleVerifyAndClose(
@@ -421,66 +410,6 @@ export default function MyActionsPage() {
   }
 
   /* =========================================================
-     REAL FILE / CAMERA EVIDENCE
-     ========================================================= */
-
-  async function handleEvidenceFile(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    if (!selectedAction) {
-      return;
-    }
-
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-    if (selectedAction.evidence.length >= MAX_EVIDENCE_IMAGES) { window.alert("Maximum 5 evidence images allowed."); event.target.value = ""; return; }
-
-    let url: string | undefined;
-
-    if (file.type.startsWith("image/")) {
-      url = await readImageAsDataUrl(file);
-    }
-
-    const evidence = {
-      id: `EV-${crypto.randomUUID()}`,
-      name: file.name,
-      type: file.type.startsWith("image/")
-        ? ("image" as const)
-        : ("document" as const),
-      uploadedAt: new Date()
-        .toISOString()
-        .slice(0, 10),
-      uploadedBy: selectedAction.assignedTo,
-      url,
-    };
-
-    const updatedAction =
-      addActionEvidence(
-        selectedAction.id,
-        evidence
-      );
-
-    if (updatedAction) {
-      setSelectedAction(updatedAction);
-    }
-
-    event.target.value = "";
-  }
-
-  /* =========================================================
-     IMAGE PREVIEW
-     ========================================================= */
-
-  function readImageAsDataUrl(
-    file: File
-  ): Promise<string | undefined> {
-    return optimizeEvidenceImage(file).then(({ dataUrl }) => dataUrl).catch((error) => { window.alert(error instanceof Error ? error.message : "Unable to process this image."); return undefined; });
-  }
-
-  /* =========================================================
      REMOVE EVIDENCE
      ========================================================= */
 
@@ -496,19 +425,32 @@ export default function MyActionsPage() {
   }
 
   /* =========================================================
-     OPEN FILE BROWSER
-     ========================================================= */
-
-  function handleOpenFileBrowser() {
-    fileInputRef.current?.click();
-  }
-
-  /* =========================================================
      OPEN CAMERA
      ========================================================= */
 
   function handleOpenCamera() {
-    cameraInputRef.current?.click();
+    setAfterCameraOpen(true);
+  }
+
+  function handleCapturedAfterPhoto(photo: string) {
+    if (!selectedAction) return;
+    if (selectedAction.evidence.length >= MAX_EVIDENCE_IMAGES) {
+      window.alert("Maximum 5 evidence images allowed.");
+      return;
+    }
+
+    const updatedAction = addActionEvidence(selectedAction.id, {
+      id: `EV-${crypto.randomUUID()}`,
+      name: `After photo ${new Date().toLocaleString("en-IN")}.jpg`,
+      type: "image",
+      evidenceType: "resolution",
+      mimeType: "image/jpeg",
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: currentUser.name,
+      url: photo,
+    });
+
+    if (updatedAction) setSelectedAction(updatedAction);
   }
 
   /* =========================================================
@@ -539,11 +481,9 @@ export default function MyActionsPage() {
     const isResponsiblePerson = selectedAction.responsiblePersonId
       ? selectedAction.responsiblePersonId === currentUser.id
       : selectedAction.assignedTo === currentUser.name;
-    const isActionCreator = selectedAction.createdByUserId
-      ? selectedAction.createdByUserId === currentUser.id
-      : !selectedAction.auditor || selectedAction.auditor === currentUser.name;
+    const isZoneLeader = selectedAction.zoneLeaderId === currentUser.id;
     const canEditResolution = isResponsiblePerson && ["Assigned", "Open", "In Progress", "Rework Required"].includes(selectedAction.status);
-    const canReview = isActionCreator && ["Pending Review", "Awaiting Review"].includes(selectedAction.status);
+    const canReview = isZoneLeader && selectedAction.status === "Awaiting Review";
     const latestRemark = [...(selectedAction.reviewHistory ?? [])].reverse().find((item) => item.type === "sent_back");
 
     return createPortal(
@@ -696,9 +636,27 @@ export default function MyActionsPage() {
                   </div>
                 </div>
 
-                <p className="mt-3 text-sm leading-6">
-                  {selectedAction.description}
-                </p>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Original Finding
+                    </p>
+                    <p className="mt-1 text-sm leading-6">
+                      {selectedAction.originalFinding ?? selectedAction.description}
+                    </p>
+                  </div>
+
+                  {selectedAction.status !== "Awaiting Assignment" && (
+                    <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Action Plan
+                      </p>
+                      <p className="mt-1 text-sm font-medium leading-6">
+                        {selectedAction.actionPlan ?? selectedAction.proposedAction ?? selectedAction.description}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 <div className="mt-4 overflow-hidden rounded-lg border bg-card">
                   <div className="grid grid-cols-2 divide-x border-b">
@@ -852,7 +810,7 @@ export default function MyActionsPage() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         Record the action taken and
                         provide evidence before
-                        submitting it for auditor review.
+                        submitting it for Zone Leader review.
                       </p>
                     </div>
 
@@ -912,26 +870,11 @@ export default function MyActionsPage() {
                           </p>
 
                           <p className="mt-1 text-xs text-muted-foreground">
-                            Upload a file or capture
-                            evidence using the camera.
+                            Take a photo showing the completed corrective action.
                           </p>
                         </div>
 
                         <div className="flex shrink-0 gap-2">
-                          {/* Upload */}
-
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={
-                              handleOpenFileBrowser
-                            }
-                          >
-                            <Upload className="mr-2 size-4" />
-                            Upload
-                          </Button>
-
                           {/* Camera */}
 
                           <Button
@@ -943,33 +886,9 @@ export default function MyActionsPage() {
                             }
                           >
                             <ImageIcon className="mr-2 size-4" />
-                            Camera
+                            Take After Photo
                           </Button>
 
-                          {/* File browser */}
-
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            className="hidden"
-                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                            onChange={
-                              handleEvidenceFile
-                            }
-                          />
-
-                          {/* Camera */}
-
-                          <input
-                            ref={cameraInputRef}
-                            type="file"
-                            className="hidden"
-                            accept="image/*"
-                            capture="environment"
-                            onChange={
-                              handleEvidenceFile
-                            }
-                          />
                         </div>
                       </div>
 
@@ -1074,10 +993,10 @@ export default function MyActionsPage() {
                             selectedAction.id
                           )
                         }
-                        title="Submit for auditor review"
+                        title="Submit for Zone Leader review"
                       >
                         <CheckCircle2 className="mr-2 size-4" />
-                        Submit for Auditor Review
+                        Submit for Review
                       </Button>
 
                       <p className="mt-2 text-center text-xs text-muted-foreground">Observation, Corrective Action Category, and evidence are required.</p>
@@ -1087,10 +1006,10 @@ export default function MyActionsPage() {
               )}
 
               {/* =================================================
-                  AUDITOR REVIEW
+                  ZONE LEADER REVIEW
                   ================================================= */}
 
-              {["Pending Review", "Awaiting Review"].includes(selectedAction.status) && (
+              {selectedAction.status === "Awaiting Review" && (
                 <section className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
                   <div>
                     <div className="flex items-start gap-3">
@@ -1098,13 +1017,13 @@ export default function MyActionsPage() {
 
                       <div>
                         <p className="text-sm font-semibold">
-                          Auditor Review
+                          Zone Leader Review
                         </p>
 
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                           The responsible person has completed
                           the corrective work and submitted it
-                          for auditor verification.
+                          for Zone Leader verification.
                         </p>
                       </div>
                     </div>
@@ -1204,12 +1123,11 @@ export default function MyActionsPage() {
 
                       <div className="rounded-lg border bg-background p-3">
                         <p className="text-xs text-muted-foreground">
-                          Auditor
+                          Zone Leader
                         </p>
 
                         <p className="mt-1 text-sm font-medium">
-                          {selectedAction.auditor ||
-                            "Rumesh Ravi"}
+                          {selectedAction.zoneLeaderName || "—"}
                         </p>
                       </div>
                     </div>
@@ -1221,7 +1139,7 @@ export default function MyActionsPage() {
                         className="flex-1"
                         onClick={() => setShowSendBack(true)}
                       >
-                        Send Back
+                        Return for Rework
                       </Button>
 
                       <Button
@@ -1234,9 +1152,9 @@ export default function MyActionsPage() {
                         }
                       >
                         <CheckCircle2 className="mr-2 size-4" />
-                        Verify & Close
+                        Approve &amp; Close
                       </Button>
-                    </div> : <p className="mt-4 rounded-lg border bg-background p-3 text-xs text-muted-foreground">Awaiting review by {selectedAction.createdByName ?? selectedAction.auditor ?? "the action creator"}.</p>}
+                    </div> : <p className="mt-4 rounded-lg border bg-background p-3 text-xs text-muted-foreground">Awaiting review by {selectedAction.zoneLeaderName ?? "the Zone Leader"}.</p>}
 
                     {showSendBack && canReview && (
                       <div className="mt-4 rounded-lg border border-destructive/30 bg-background p-3">
@@ -1298,7 +1216,7 @@ export default function MyActionsPage() {
                     {selectedAction.activityHistory!.map((item) => (
                       <div key={item.id} className="relative text-sm before:absolute before:-left-[19px] before:top-1.5 before:size-2 before:rounded-full before:bg-primary">
                         <p className="font-medium">{formatActivityType(item.type)}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">{item.actorName} · {new Date(item.createdAt).toLocaleString()}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{item.actorName}{item.actorRole ? ` · ${item.actorRole}` : ""} · {new Date(item.createdAt).toLocaleString()}</p>
                         {item.remark && <p className="mt-2 rounded-md bg-muted/50 p-2 text-xs leading-5">{item.remark}</p>}
                       </div>
                     ))}
@@ -1393,6 +1311,14 @@ export default function MyActionsPage() {
           </div>
         </aside>
 
+        <AfterPhotoCaptureDialog
+          open={afterCameraOpen}
+          beforeImage={selectedAction.issueEvidence?.find((item) => item.type === "image" && item.url)?.url}
+          beforeName={selectedAction.issueEvidence?.find((item) => item.type === "image" && item.url)?.name}
+          onOpenChange={setAfterCameraOpen}
+          onUsePhoto={handleCapturedAfterPhoto}
+        />
+
         {previewEvidence && (
           <div
             className="fixed inset-0 z-[10002] flex flex-col bg-slate-950/95"
@@ -1470,7 +1396,7 @@ export default function MyActionsPage() {
           <StatCard label="Open" value={openActions} description="Yet to be started" icon={Clock3} />
           <StatCard label="In Progress" value={inProgressActions} description="Currently being worked on" icon={Target} />
           <StatCard label="Overdue" value={overdueActions} description="Require attention" icon={AlertCircle} />
-          <StatCard label="Awaiting Review" value={awaitingReviewActions} description="Pending auditor verification" icon={Eye} />
+          <StatCard label="Awaiting Review" value={awaitingReviewActions} description="Pending Zone Leader verification" icon={Eye} />
           <StatCard label="Completed" value={completedActions} description="Successfully closed" icon={CheckCircle2} />
         </div>
 
@@ -1618,7 +1544,7 @@ export default function MyActionsPage() {
                             <span>Raised by: {action.createdByName ?? action.auditor ?? "—"}</span>
 
                             {action.status === "Completed" && (
-                              <span>Approved by: {action.reviewedBy ?? action.auditor ?? "—"}</span>
+                              <span>Approved by: {action.reviewedByRole === "Zone Leader" ? action.reviewedBy : action.closedBy ?? action.zoneLeaderName ?? "—"}</span>
                             )}
 
                             {action.actionCategory && <span>{action.actionCategory}</span>}
@@ -1701,11 +1627,13 @@ function CompactDetail({
 function formatActivityType(type: NonNullable<MyAction["activityHistory"]>[number]["type"]) {
   const labels = {
     created: "Action created",
+    proposed: "Proposed action submitted",
     awaiting_assignment: "Awaiting assignment",
     assigned: "Action assigned",
     started: "Work started",
     submitted: "Submitted for review",
     resubmitted: "Resubmitted for review",
+    review_requested: "Awaiting Zone Leader Review",
     reviewed: "Reviewed",
     sent_back: "Sent back for rework",
     closed: "Action closed",

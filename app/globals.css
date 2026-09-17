@@ -659,6 +659,26 @@ body {
     animation: none !important;
     transition: none !important;
   }
+
+  .report-brand-header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    background: white !important;
+    color: #0f172a !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .report-brand-logo {
+    display: block !important;
+    width: 50mm !important;
+    height: auto !important;
+    max-height: 18mm !important;
+    object-fit: contain !important;
+    object-position: left center !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
 
 /* =========================================================
