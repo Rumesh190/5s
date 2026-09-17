@@ -51,6 +51,7 @@ Run targeted tests during development, then full checks before handoff.
 - `/5s/continuous-improvement` plus `/new`, `/[improvementId]`, and `/report`.
 - `/5s/reports` — report library and sharing.
 - `/administration/users` — local demo administration.
+- `/settings/audit-configuration/questions` — Admin-only 5S question configuration.
 - `/profile` — placeholder profile screen.
 
 ## 6. Architecture
@@ -71,6 +72,7 @@ Avoid broad folder moves. Prefer small modules and existing `@/` aliases.
 ## 7. Canonical Data Sources
 
 - Audit type/template/store: `features/five-s/types/five-s.ts`, `features/five-s/data/five-s-data.ts`, `lib/five-s/audit-store.ts`.
+- Active question definitions: `features/five-s/question-configuration/{types,data,store}.ts`; the default seed is the canonical 39-question template.
 - Corrective Action type/fixtures/store: `features/five-s/types/my-actions.ts`, `features/five-s/data/my-actions-data.ts`, `lib/actions/action-store.ts`.
 - Zones, leaders, members, priorities: `lib/five-s/configuration.ts`.
 - Red Tag: `features/five-s/red-tag/{types,store,data}.ts`.
@@ -118,7 +120,10 @@ Use stable IDs where available; names are display values and legacy fallbacks.
 ## 11. Audit Lifecycle
 
 - Persisted: `Draft`, `In Progress`, `Completed`; Review is a derived UI stage.
-- Fixed live template: 39 questions (7 Sort, 9 Set in Order, 8 Shine, 7 Standardize, 8 Sustain).
+- The default template has 39 questions (7 Sort, 9 Set in Order, 8 Shine, 7 Standardize, 8 Sustain).
+- 5S sections are system-defined and immutable. Only Admin can manage questions inside those sections.
+- Admin may add, edit, deactivate/delete and reorder questions.
+- Audit creation snapshots the active question configuration so later configuration changes never alter historical audits.
 - One garment-industry GOOD PRACTICE reference image per question.
 - Audit Completion Date uses legacy-compatible `dueDate` and defaults to local creation date.
 - Auto-preview triggers only on incomplete → all-required-answered; never auto-submit.

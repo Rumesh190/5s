@@ -145,7 +145,7 @@ function ProductNav() {
                 )}
               >
                 <Icon className={cn("size-4", active ? "text-[var(--brand-accent)] dark:text-[var(--brand-accent-light)]" : "text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300")} />
-                <span className="whitespace-nowrap">{item.label === "Administration" ? item.label : t(navigationKey(item.href))}</span>
+                <span className="whitespace-nowrap">{item.requiredPermission ? item.label : t(navigationKey(item.href))}</span>
                 {active && <span className="absolute inset-x-3 -bottom-[14px] h-0.5 rounded-full bg-[var(--brand-accent)] shadow-[0_0_8px_var(--brand-accent-shadow)] dark:bg-[var(--brand-accent-light)]" />}
               </Link>
             )
@@ -155,7 +155,7 @@ function ProductNav() {
               <MoreHorizontal className="size-4" /> {t("navigation.more")}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center" className="w-56">
-              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="break-words">{item.label === "Administration" ? item.label : t(navigationKey(item.href))}</span></DropdownMenuItem> })}
+              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="break-words">{item.requiredPermission ? item.label : t(navigationKey(item.href))}</span></DropdownMenuItem> })}
             </DropdownMenuContent>
           </DropdownMenu>}
         </nav>

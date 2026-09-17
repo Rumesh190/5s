@@ -9,7 +9,7 @@ export const PERMISSION_GROUPS = {
   Reports:["reports.view","reports.export"],
   "Continuous Improvement":["ci.view","ci.create","ci.review","ci.implement","ci.complete"],
   "Red Tag":["red_tag.view","red_tag.create","red_tag.manage","red_tag.print"],
-  Administration:["administration.view","administration.manage_users","administration.manage_roles","administration.manage_configuration"],
+  Administration:["administration.view","administration.manage_users","administration.manage_roles","administration.manage_configuration","administration.manage_questions"],
 } as const;
 
 export type PermissionCode = typeof PERMISSION_GROUPS[keyof typeof PERMISSION_GROUPS][number];

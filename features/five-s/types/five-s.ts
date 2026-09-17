@@ -55,6 +55,10 @@ export interface FiveSQuestion {
 
   question: string;
 
+  /** Snapshot metadata copied from the active question configuration. */
+  required?: boolean;
+  displayOrder?: number;
+
   description?: string;
 
   referenceImage?: string;

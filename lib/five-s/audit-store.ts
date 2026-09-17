@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { FIVE_S_AUDITS } from "@/features/five-s/data/five-s-data";
 
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
+import { createAuditQuestionSnapshot } from "@/features/five-s/question-configuration/store";
 import { readStorageJson, readStorageString, removeStorage, safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
 
 /* =========================================================
@@ -501,15 +502,15 @@ export function createFiveSAudit(
     | "maxScore"
     | "completionPercentage"
     | "status"
-  >
+    | "sections"
+  > & { sections?: FiveSAudit["sections"] }
 ): FiveSAudit {
   initializeStore();
 
   const now =
     new Date();
 
-  const sections =
-    input.sections ?? [];
+  const sections = input.sections?.length ? input.sections : createAuditQuestionSnapshot();
 
   /**
    * Reserve a permanent running number.
@@ -535,6 +536,7 @@ export function createFiveSAudit(
 
   const audit: FiveSAudit = {
     ...input,
+    sections,
 
     /**
      * Keep an internal unique ID separate

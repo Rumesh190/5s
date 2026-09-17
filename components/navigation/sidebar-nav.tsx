@@ -44,7 +44,7 @@ function SidebarNav({ collapsed = false, onNavigate }: SidebarNavProps) {
 function SidebarLink({ entry, active, collapsed, onNavigate }: { entry: NavLeaf; active: boolean; collapsed: boolean; onNavigate?: () => void }) {
   const Icon = entry.icon
   const { t } = useI18n()
-  const label = entry.label === "Administration" ? entry.label : t(navigationKey(entry.href))
+  const label = entry.requiredPermission ? entry.label : t(navigationKey(entry.href))
   const link = (
     <Link
       href={entry.href}

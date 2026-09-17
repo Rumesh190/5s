@@ -6,35 +6,16 @@ import { GARMENT_REFERENCE_CONTENT, referenceFields } from "@/lib/five-s/referen
 import { didRequiredAnswersBecomeComplete } from "@/lib/five-s/audit-completion";
 import { stopCameraStream, verificationIsComplete } from "@/lib/five-s/audit-verification";
 import type { FiveSCategory } from "@/features/five-s/types/five-s";
-
-const source = readFileSync(resolve("features/five-s/audit-list-page.tsx"), "utf8");
-const templateSource = source.match(
-  /const FIVE_S_QUESTIONS:[\s\S]*?= \{([\s\S]*?)\n\};/,
-)?.[1];
-
-function questionsFor(category: string, nextCategory?: string) {
-  if (!templateSource) throw new Error("Active audit-list question template was not found.");
-  const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const end = nextCategory
-    ? `\\n\\s*(?:"${nextCategory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"|${nextCategory}):`
-    : "$";
-  const block = templateSource.match(
-    new RegExp(`(?:"${escaped}"|${escaped}): \\[([\\s\\S]*?)\\],${end}`),
-  )?.[1];
-  if (block === undefined) throw new Error(`Question section ${category} was not found.`);
-  return [...block.matchAll(/^\s*"((?:[^"\\]|\\.)*)",?$/gm)].map((match) =>
-    JSON.parse(`"${match[1]}"`) as string,
-  );
-}
+import { DEFAULT_FIVE_S_QUESTION_TEXT } from "@/features/five-s/question-configuration/data";
 
 describe("active audit-list 5S template", () => {
   it("preserves section order, counts, question order, and exact wording", () => {
     const template = [
-      ["Sort", questionsFor("Sort", "Set in Order")],
-      ["Set in Order", questionsFor("Set in Order", "Shine")],
-      ["Shine", questionsFor("Shine", "Standardize")],
-      ["Standardize", questionsFor("Standardize", "Sustain")],
-      ["Sustain", questionsFor("Sustain")],
+      ["Sort", DEFAULT_FIVE_S_QUESTION_TEXT.Sort],
+      ["Set in Order", DEFAULT_FIVE_S_QUESTION_TEXT["Set in Order"]],
+      ["Shine", DEFAULT_FIVE_S_QUESTION_TEXT.Shine],
+      ["Standardize", DEFAULT_FIVE_S_QUESTION_TEXT.Standardize],
+      ["Sustain", DEFAULT_FIVE_S_QUESTION_TEXT.Sustain],
     ];
 
     expect(template.map(([name, questions]) => [name, questions.length])).toEqual([
@@ -117,7 +98,7 @@ describe("active audit-list 5S template", () => {
 
   it("characterizes the live two-point maximum without treating fixtures as canonical", () => {
     expect(39 * 2).toBe(78);
-    expect(source).toContain("maxScore: 2");
+    expect(readFileSync(resolve("features/five-s/question-configuration/store.ts"), "utf8")).toContain("maxScore: 2");
   });
 
   it("maps all 39 questions to one unique garment good-practice reference asset", () => {

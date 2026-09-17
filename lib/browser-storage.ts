@@ -53,6 +53,7 @@ export const DEMO_STORAGE_KEYS = [
   "five-s-red-tags-v1",
   "five-s-continuous-improvements-v1",
   "five-s-administration-users-v1",
+  "five-s-question-configuration-v1",
   "standalone-5s-notifications",
   "standalone-5s-notification-fixture-version",
 ] as const;

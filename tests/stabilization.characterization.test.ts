@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +19,13 @@ describe("stabilized architecture", () => {
     expect(read("features/five-s/types/five-s.ts")).not.toContain("interface FiveSAction");
     expect(read("features/five-s/types/my-actions.ts")).not.toContain('"Pending Auditor Review"');
     expect(read("features/five-s/types/my-actions.ts")).toContain('"Awaiting Review"');
+  });
+
+  it("keeps list routes free of superseded embedded workflow implementations", () => {
+    const actionsPage = read("features/five-s/actions-page.tsx");
+    expect(actionsPage).not.toContain("createPortal");
+    expect(actionsPage).not.toContain("renderActionDrawer");
+    expect(existsSync(resolve("features/five-s/components/FiveSAuditChecklist.tsx"))).toBe(false);
   });
 
   it("reads typed browser records through the persistence boundary", () => {

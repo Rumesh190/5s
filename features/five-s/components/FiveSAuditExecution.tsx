@@ -302,7 +302,7 @@ function FiveSAuditExecution({
                 evidence:
                   question.evidence ?? [],
               })
-            ),
+            ).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
         }))
         .sort(
           (a, b) =>
@@ -492,8 +492,9 @@ function FiveSAuditExecution({
         )
       : 0;
 
-  const auditReadyForCompletion =
-    allQuestions.length > 0 && answeredQuestions === allQuestions.length;
+  const requiredQuestions = allQuestions.filter((question) => question.required !== false);
+  const auditReadyForCompletion = requiredQuestions.length > 0
+    && requiredQuestions.every((question) => questionStates[question.id]?.score !== null);
   const isFinalQuestion = Boolean(
     activeSection &&
     activeSectionIndex === sections.length - 1 &&
@@ -599,10 +600,7 @@ function FiveSAuditExecution({
     section: FiveSSection
   ) {
     return section.questions.every(
-      (question) =>
-        isQuestionComplete(
-          question
-        )
+      (question) => question.required === false || isQuestionComplete(question)
     );
   }
 
@@ -628,8 +626,11 @@ function FiveSAuditExecution({
       return;
     }
 
+    const requiredQuestionIds = allQuestions
+      .filter((question) => question.required !== false)
+      .map((question) => question.id);
     const becameReadyForReview = didRequiredAnswersBecomeComplete(
-      allQuestions.map((question) => question.id),
+      requiredQuestionIds,
       completionSnapshotRef.current,
       snapshot,
     );

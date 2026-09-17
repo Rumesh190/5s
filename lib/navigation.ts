@@ -106,6 +106,7 @@ export const ROUTE_LABELS: Record<
   "/5s/continuous-improvement": "Continuous Improvement",
   "/5s/red": "Red Tag",
   "/administration/users": "Users & Access",
+  "/settings/audit-configuration/questions": "5S Questions",
 
   /*
    * Keep Profile temporarily because the shared
