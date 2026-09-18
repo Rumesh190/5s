@@ -14,6 +14,7 @@ import {
 } from "@/lib/five-s/audit-store";
 
 import type { FiveSAudit } from "./types/five-s";
+import { StoragePersistenceError } from "@/lib/browser-storage";
 
 /* =========================================================
    PAGE
@@ -27,6 +28,7 @@ export default function FiveSAuditListPage() {
 
   const [isCreatingAudit, setIsCreatingAudit] =
     useState(false);
+  const [creationError, setCreationError] = useState("");
 
   /* =======================================================
      START AUDIT
@@ -34,6 +36,7 @@ export default function FiveSAuditListPage() {
 
   function handleStartAudit() {
     setSelectedAudit(null);
+    setCreationError("");
     setIsCreatingAudit(true);
   }
 
@@ -49,8 +52,8 @@ export default function FiveSAuditListPage() {
     auditor: string;
     dueDate: string;
   }) {
-    const audit =
-      createFiveSAudit({
+    try {
+      const audit = createFiveSAudit({
         title: input.title,
         plant: input.plant,
         department: input.department,
@@ -59,8 +62,14 @@ export default function FiveSAuditListPage() {
         dueDate: input.dueDate,
       });
 
-    setIsCreatingAudit(false);
-    setSelectedAudit(audit);
+      setCreationError("");
+      setIsCreatingAudit(false);
+      setSelectedAudit(audit);
+      return true;
+    } catch (error) {
+      setCreationError(error instanceof StoragePersistenceError ? error.message : "Unable to save this audit. Existing audit data has been preserved.");
+      return false;
+    }
   }
 
   /* =======================================================
@@ -123,6 +132,7 @@ export default function FiveSAuditListPage() {
       <FiveSAuditCreate
         onBack={handleBack}
         onStart={handleCreateAudit}
+        storageError={creationError}
       />
     );
   }

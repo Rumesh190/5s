@@ -1,7 +1,18 @@
 export type StorageFailureReason = "quota" | "unavailable" | "unknown";
 export type StorageResult = { success: true } | { success: false; reason: StorageFailureReason; message: string };
 
-export const STORAGE_FULL_MESSAGE = "Unable to save because browser storage is full. Remove an older demo record or a large attachment and try again.";
+export const STORAGE_FULL_MESSAGE = "This device does not have enough browser storage to save this change. Existing data has been preserved.";
+
+export class StoragePersistenceError extends Error {
+  constructor(public result: Exclude<StorageResult, { success: true }>) {
+    super(result.message);
+    this.name = "StoragePersistenceError";
+  }
+}
+
+export function approximateSerializedBytes(value: unknown): number {
+  return new Blob([JSON.stringify(value)]).size;
+}
 
 export function readStorageString(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -28,8 +39,13 @@ function isQuotaError(error: unknown) {
 
 export function safeSetStorage(key: string, value: unknown): StorageResult {
   if (typeof window === "undefined") return { success: false, reason: "unavailable", message: "Browser storage is unavailable." };
-  try { window.localStorage.setItem(key, JSON.stringify(value)); return { success: true }; }
-  catch (error) { console.error(`Unable to persist ${key}:`, error); return { success: false, reason: isQuotaError(error) ? "quota" : "unknown", message: isQuotaError(error) ? STORAGE_FULL_MESSAGE : "Unable to save this change. Please try again." }; }
+  let serialized = "";
+  try { serialized = JSON.stringify(value); window.localStorage.setItem(key, serialized); return { success: true }; }
+  catch (error) {
+    const quota = isQuotaError(error);
+    console.error(`Unable to persist ${key} (${new Blob([serialized]).size} bytes):`, error);
+    return { success: false, reason: quota ? "quota" : "unknown", message: quota ? STORAGE_FULL_MESSAGE : "Unable to save this change. Please try again." };
+  }
 }
 
 export function safeSetStorageString(key: string, value: string): StorageResult {

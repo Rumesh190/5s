@@ -6,7 +6,7 @@ import { FIVE_S_AUDITS } from "@/features/five-s/data/five-s-data";
 
 import type { FiveSAudit } from "@/features/five-s/types/five-s";
 import { createAuditQuestionSnapshot } from "@/features/five-s/question-configuration/store";
-import { readStorageJson, readStorageString, removeStorage, safeSetStorage, safeSetStorageString } from "@/lib/browser-storage";
+import { readStorageJson, readStorageString, removeStorage, safeSetStorage, safeSetStorageString, StoragePersistenceError, type StorageResult } from "@/lib/browser-storage";
 
 /* =========================================================
    STORAGE
@@ -93,12 +93,12 @@ function loadFromStorage(): void {
    SAVE TO LOCAL STORAGE
    ========================================================= */
 
-function persistAudits(): void {
+function persistAudits(): StorageResult {
   if (typeof window === "undefined") {
-    return;
+    return { success: true };
   }
 
-  safeSetStorage(STORAGE_KEY, audits);
+  return safeSetStorage(STORAGE_KEY, audits);
 }
 
 /* =========================================================
@@ -573,12 +573,17 @@ export function createFiveSAudit(
         .slice(0, 10),
   };
 
+  const previousAudits = audits;
   audits = [
     audit,
     ...audits,
   ];
 
-  persistAudits();
+  const persistence = persistAudits();
+  if (!persistence.success) {
+    audits = previousAudits;
+    throw new StoragePersistenceError(persistence);
+  }
 
   emitChange();
 
@@ -598,6 +603,7 @@ export function updateFiveSAudit(
   let updatedAudit:
     | FiveSAudit
     | undefined;
+  const previousAudits = audits;
 
   audits =
     audits.map(
@@ -621,7 +627,11 @@ export function updateFiveSAudit(
   if (
     updatedAudit
   ) {
-    persistAudits();
+    const persistence = persistAudits();
+    if (!persistence.success) {
+      audits = previousAudits;
+      return undefined;
+    }
 
     emitChange();
   }

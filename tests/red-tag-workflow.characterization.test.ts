@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { getRedTagDisplayStatus } from "@/features/five-s/red-tag/types";
 
 const read = (path: string) => readFileSync(resolve(path), "utf8");
 
@@ -10,10 +11,11 @@ describe("Red Tag closure workflow", () => {
   const store = read("features/five-s/red-tag/store.ts");
   const page = read("features/five-s/red-tag/red-tag-module.tsx");
 
-  it("supports the required lifecycle without a direct Open to Closed transition", () => {
-    for (const status of ["Open", "Assigned", "In Progress", "Awaiting Review", "Rework Required", "Closed"]) {
-      expect(types).toContain(`\"${status}\"`);
-    }
+  it("uses the direct-assignment lifecycle without a direct Raised to Closed transition", () => {
+    expect(getRedTagDisplayStatus("Open")).toBe("Raised");
+    expect(getRedTagDisplayStatus("Assigned")).toBe("In Progress");
+    for (const status of ["Raised", "In Progress", "Awaiting Review", "Rework Required", "Closed"]) expect(page).toContain(`\"${status}\"`);
+    expect(store).toContain('status: "In Progress", priority: input.priority');
     expect(store).toContain('tag.status !== "Awaiting Review"');
     expect(store).toContain("!tag.actionPlan || !tag.responsiblePersonId || !tag.closureImageUrl || !tag.submittedAt");
   });
@@ -37,8 +39,24 @@ describe("Red Tag closure workflow", () => {
     expect(page).toContain("Submit for Review");
   });
 
+  it("combines Action Plan and member assignment without a second start action", () => {
+    expect(page).toContain("Assign Action");
+    expect(page).toContain('placeholder="Select Zone Member"');
+    expect(page).not.toContain("Start Action");
+    expect(store).toContain('event("planned", `Action Plan Assigned to ${member.name}`');
+    expect(store).toContain("recipientUserId: member.id");
+  });
+
+  it("retains the responsible member through rework", () => {
+    expect(store).toContain('status: "Rework Required", reviewComment: remark');
+    expect(store).not.toContain('status: "Awaiting Assignment", reviewComment: remark');
+    expect(store).toContain("recipientUserId: tag.responsiblePersonId");
+  });
+
   it("normalizes legacy Resolved records and tolerates missing history", () => {
-    expect(store).toContain('(tag.status as string) === "Resolved" ? "Awaiting Review"');
+    expect(store).toContain('legacyStatus === "Resolved"');
+    expect(store).toContain('legacyStatus === "Awaiting Assignment"');
+    expect(types).toContain('status === "Assigned"');
     expect(store).toContain("Array.isArray(tag.history) ? tag.history : []");
   });
 });

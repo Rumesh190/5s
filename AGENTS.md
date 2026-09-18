@@ -141,14 +141,17 @@ Use stable IDs where available; names are display values and legacy fallbacks.
 - Canonical review status is `Awaiting Review`; legacy review names normalize at persistence boundaries.
 - Before/finding and After/resolution evidence remain separate.
 - After capture shows “Match the Before Photo” guidance and Before reference.
+- Action Category supports the predefined list plus “Other”; Other requires a record-specific custom category, and displays/reports show that custom value without adding it to global options.
 
 ## 13. Red Tag Lifecycle
 
-`Open → Assigned → In Progress → Awaiting Review → Rework Required or Closed`
+`Raised → In Progress → Awaiting Review → Rework Required or Closed`
 
-- Zone Leader defines plan, member, due date, priority, and instructions.
-- Zone Member starts, captures evidence, comments, and submits.
+- Zone Leader defines/reviews the Action Plan and directly selects the Responsible Zone Member, due date, priority, and instructions in the same operation.
+- There is no separate assignment step after Responsible Zone Member selection; selecting the member is the assignment and immediately opens member execution.
+- Zone Member executes, captures evidence, comments, and submits.
 - Zone Leader returns or closes; Auditor is not the closer.
+- Rework retains the same Responsible Zone Member and does not return to assignment.
 - Closure requires plan, member, evidence, submission, and leader approval.
 - Red Tags create/reuse one canonical Action using `sourceModule: "Red Tag"`, `sourceId`, and reverse `actionId`.
 
@@ -195,6 +198,19 @@ The backend must own authorization, IDs, timestamps, transitions, evidence acces
 - Use `toLocalInputDate` for local calendar-date inputs.
 - Preserve unrelated dirty-worktree changes.
 - Run tests, TypeScript, lint, and build after meaningful work.
+
+### Camera capture semantics
+
+- Any user-facing “Take Photo”, “Capture Photo”, or “Retake” action must open/resume a real camera session; it must never open a generic file or gallery picker.
+- Operational workplace evidence prefers the rear camera with `facingMode: { ideal: "environment" }`. Final auditor verification prefers the front camera with `facingMode: { ideal: "user" }`.
+- If a workflow intentionally supports existing files, keep that as a separate, explicitly labelled Upload action.
+- Reuse the shared operational camera dialog where its capture/review flow fits. Preserve specialized Before/After comparison and auditor-verification experiences.
+- Every live-camera flow must show initialization and actionable error states, prevent duplicate streams, support capture/retake/use as applicable, and stop every media track on close, cancel, acceptance, replacement, navigation, and unmount.
+
+### Browser evidence storage
+
+- Never persist unbounded, full-resolution photo/evidence base64 payloads inside domain `localStorage` records. All newly captured photos must pass through the shared image-normalization layer first.
+- Browser-storage failures must be propagated to the UI and must never be treated as successful domain writes; preserve the last valid in-memory and persisted state on failure.
 
 ## 19. AI Workflow
 

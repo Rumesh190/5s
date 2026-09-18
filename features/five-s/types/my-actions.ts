@@ -80,6 +80,8 @@ export interface MyAction {
 
   /** Operational classification selected when the action is created. */
   actionCategory?: string;
+  /** Record-specific classification required when actionCategory is "Other". */
+  customActionCategory?: string;
   /** Resolution classification selected by the responsible member. */
   correctiveActionCategory?: string;
   improvementTheme?: string;

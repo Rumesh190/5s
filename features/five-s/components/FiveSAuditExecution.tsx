@@ -33,6 +33,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RequiredMark } from "@/components/ui/required-mark";
 
 import {
   Card,
@@ -54,12 +55,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import FiveSPageHeader from "./FiveSPageHeader";
 import FinalAuditVerificationDialog, { type AuditVerificationCapture } from "./FinalAuditVerificationDialog";
 import FiveSReferenceGuide from "./FiveSReferenceGuide";
+import OperationalPhotoCaptureDialog from "./OperationalPhotoCaptureDialog";
 import { useI18n } from "@/components/preferences/use-i18n";
 import { auditQuestionText, auditSectionDescription, auditSectionName } from "@/lib/audit-question-translations";
 import { referenceFields } from "@/lib/five-s/reference-guides";
@@ -67,8 +70,9 @@ import { optimizeEvidenceImage, MAX_EVIDENCE_IMAGES } from "@/lib/evidence-image
 
 import { createAction, getActionById, updateAction } from "@/lib/actions/action-store";
 import { updateFiveSAudit } from "@/lib/five-s/audit-store";
-import { didRequiredAnswersBecomeComplete } from "@/lib/five-s/audit-completion";
+import { didRequiredAnswersBecomeComplete, getPendingRequiredQuestionIds, isAuditQuestionComplete } from "@/lib/five-s/audit-completion";
 import { getAuditScoreLabel } from "@/lib/five-s/audit-score";
+import { getActionCategoryDisplay, getCustomActionCategory, isActionCategoryValid } from "@/lib/five-s/action-category";
 import { AUDIT_LIFECYCLE_STAGES } from "@/lib/five-s/lifecycle-status";
 import { useCurrentUser } from "@/lib/current-user";
 import {
@@ -106,6 +110,7 @@ interface QuestionState {
   actionDescription: string;
   proposedAction: string;
   actionCategory: string;
+  customActionCategory: string;
 
   assignedTo: string;
   responsiblePersonId: string;
@@ -119,6 +124,15 @@ interface QuestionState {
   dueDate: string;
 
   evidence: FiveSEvidence[];
+}
+
+interface PendingRequiredQuestion {
+  id: string;
+  number: number;
+  section: FiveSCategory;
+  sectionIndex: number;
+  questionIndex: number;
+  text: string;
 }
 
 const CATEGORY_ORDER: FiveSCategory[] = [
@@ -234,6 +248,7 @@ function createInitialQuestionState(
       question.observation ?? "",
     proposedAction: "",
     actionCategory: "",
+    customActionCategory: "",
 
     assignedTo: "",
     responsiblePersonId: "",
@@ -382,6 +397,9 @@ function FiveSAuditExecution({
 
   const [showCompleteConfirmation, setShowCompleteConfirmation] =
     useState(false);
+  const [showPendingQuestions, setShowPendingQuestions] = useState(false);
+  const [cameraQuestionId, setCameraQuestionId] = useState<string | null>(null);
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
 
   const [
     activeActionQuestion,
@@ -417,20 +435,14 @@ function FiveSAuditExecution({
       >
     >({});
 
-  const cameraInputRefs =
-    useRef<
-      Record<
-        string,
-        HTMLInputElement | null
-      >
-    >({});
-
   const questionScrollRef =
     useRef<HTMLDivElement | null>(null);
   const questionListRef =
     useRef<HTMLDivElement | null>(null);
 
   const questionItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const questionFocusRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const highlightTimerRef = useRef<number | null>(null);
   const completionSnapshotRef = useRef<Record<string, boolean> | null>(null);
   const autosaveReadyRef = useRef(false);
 
@@ -485,9 +497,22 @@ function FiveSAuditExecution({
         )
       : 0;
 
-  const requiredQuestions = allQuestions.filter((question) => question.required !== false);
-  const auditReadyForCompletion = requiredQuestions.length > 0
-    && requiredQuestions.every((question) => questionStates[question.id]?.score !== null);
+  const questionCompletion = Object.fromEntries(
+    allQuestions.map((question) => [question.id, isAuditQuestionComplete(question, questionStates[question.id])])
+  );
+  const pendingRequiredQuestionIds = getPendingRequiredQuestionIds(allQuestions, questionCompletion);
+  let questionNumber = 0;
+  const pendingRequiredQuestions = sections.flatMap((section, sectionIndex) =>
+    section.questions.map((question, questionIndex) => ({
+      id: question.id,
+      number: ++questionNumber,
+      section: section.category,
+      sectionIndex,
+      questionIndex,
+      text: auditQuestionText(language, section.category, questionIndex, question.question),
+    }))
+  ).filter((question) => pendingRequiredQuestionIds.includes(question.id));
+  const auditReadyForCompletion = pendingRequiredQuestions.length === 0;
   const isFinalQuestion = Boolean(
     activeSection &&
     activeSectionIndex === sections.length - 1 &&
@@ -545,6 +570,10 @@ function FiveSAuditExecution({
     };
   }, [fullScreen, previewEvidence, showActionDialog]);
 
+  useEffect(() => () => {
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+  }, []);
+
   /**
    * ---------------------------------------------------------
    * SECTION LOCKING
@@ -554,39 +583,7 @@ function FiveSAuditExecution({
   function isQuestionComplete(
     question: FiveSQuestion
   ) {
-    const state =
-      questionStates[
-        question.id
-      ];
-
-    if (!state || state.score === null) {
-      return false;
-    }
-
-    if (
-      (state.score === 0 ||
-        state.score === 1) &&
-      !state.observation.trim()
-    ) {
-      return false;
-    }
-
-    if (
-      (state.score === 0 ||
-        state.score === 1) &&
-      !state.actionId
-    ) {
-      return false;
-    }
-
-    if (
-      (state.score === 0 || state.score === 1) &&
-      state.evidence.length === 0
-    ) {
-      return false;
-    }
-
-    return true;
+    return isAuditQuestionComplete(question, questionStates[question.id]);
   }
 
   function isSectionComplete(
@@ -875,6 +872,7 @@ function FiveSAuditExecution({
         proposedAction: existingAction.proposedAction ?? existingAction.actionPlan ?? existingAction.description,
         observation: synchronizedDescription,
         actionCategory: existingAction.actionCategory ?? "",
+        customActionCategory: existingAction.customActionCategory ?? "",
         priority: existingAction.priority,
         dueDate: existingAction.dueDate,
         evidence: (existingAction.issueEvidence ?? []).map((evidence) => ({ id: evidence.id, name: evidence.name, type: evidence.type, size: 0, dataUrl: evidence.url ?? "", uploadedAt: evidence.uploadedAt, uploadedBy: evidence.uploadedBy })),
@@ -923,6 +921,7 @@ function FiveSAuditExecution({
       !state.actionTitle.trim() ||
       !state.proposedAction.trim() ||
       !state.actionCategory ||
+      !isActionCategoryValid(state.actionCategory, state.customActionCategory) ||
       !state.dueDate ||
       state.dueDate < today ||
       ((state.score === 0 || state.score === 1) && state.evidence.length === 0)
@@ -948,7 +947,7 @@ function FiveSAuditExecution({
     const title =
       state.actionTitle.trim() ||
       state.observation.trim() ||
-      `Corrective action required for ${section.category}`;
+      `Action required for ${section.category}`;
 
     const description =
       state.actionDescription.trim() ||
@@ -971,6 +970,7 @@ function FiveSAuditExecution({
         proposedActionAt: existingAction.proposedActionAt ?? new Date().toISOString(),
         actionPlan: state.proposedAction.trim(),
         actionCategory: state.actionCategory,
+        customActionCategory: getCustomActionCategory(state.actionCategory, state.customActionCategory),
         priority: state.priority,
         dueDate: state.dueDate,
         originalFinding: state.observation,
@@ -1015,6 +1015,7 @@ function FiveSAuditExecution({
 
         assignedTo: "",
         actionCategory: state.actionCategory,
+        customActionCategory: getCustomActionCategory(state.actionCategory, state.customActionCategory),
         zoneLeaderId: getFiveSZoneConfiguration(audit.area)?.leaderId,
         zoneLeaderName: getFiveSZoneConfiguration(audit.area)?.leader,
         createdByUserId: currentUser.id,
@@ -1162,6 +1163,11 @@ function FiveSAuditExecution({
     );
 
     event.target.value = "";
+  }
+
+  async function handleCameraPhoto(questionId: string, photo: string) {
+    const blob = await (await fetch(photo)).blob();
+    await createEvidenceFromFile(questionId, new File([blob], `evidence-${Date.now()}.jpg`, { type: "image/jpeg" }));
   }
 
   function removeEvidence(
@@ -1431,8 +1437,8 @@ function FiveSAuditExecution({
 
     const timer = window.setTimeout(() => {
       const status = audit.status === "In Progress" ? "In Progress" : "Draft";
-      updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
-      if (answeredQuestions > 0) setHasSavedDraft(true);
+      const saved = updateFiveSAudit(audit.id, buildCurrentAudit({ status }));
+      if (saved && answeredQuestions > 0) setHasSavedDraft(true);
     }, 450);
 
     return () => window.clearTimeout(timer);
@@ -1446,7 +1452,10 @@ function FiveSAuditExecution({
 
     if (audit.status !== "Completed") {
       const reportAudit = buildCurrentAudit();
-      updateFiveSAudit(audit.id, reportAudit);
+      if (!updateFiveSAudit(audit.id, reportAudit)) {
+        window.alert("Storage is full. This device does not have enough browser storage to save this audit. Existing audit data has been preserved.");
+        return;
+      }
     }
     router.push(`/5s/audits/${encodeURIComponent(audit.id)}/report?from=audit`);
   }
@@ -1478,7 +1487,10 @@ function FiveSAuditExecution({
       },
     });
 
-    updateFiveSAudit(audit.id, completedAudit);
+    if (!updateFiveSAudit(audit.id, completedAudit)) {
+      window.alert("Storage is full. This device does not have enough browser storage to complete this audit. Existing audit data has been preserved.");
+      return false;
+    }
 
     onComplete?.(
       completedAudit
@@ -1486,10 +1498,45 @@ function FiveSAuditExecution({
 
     setShowCompleteConfirmation(false);
     router.push(`/5s/audits/${encodeURIComponent(audit.id)}/report?from=audit`);
+    return true;
   }
 
   function requestAuditCompletion() {
+    if (pendingRequiredQuestions.length > 0) {
+      setShowCompleteConfirmation(false);
+      setShowPendingQuestions(true);
+      return;
+    }
     setShowCompleteConfirmation(true);
+  }
+
+  function requestAuditReview() {
+    if (pendingRequiredQuestions.length > 0) {
+      setShowPendingQuestions(true);
+      return;
+    }
+    setShowReview(true);
+  }
+
+  function navigateToPendingQuestion(question: PendingRequiredQuestion) {
+    setShowPendingQuestions(false);
+    setShowReview(false);
+    setNavigationDirection(question.sectionIndex >= activeSectionIndex ? "forward" : "backward");
+    setActiveSectionIndex(question.sectionIndex);
+    setActiveQuestionIndex(question.questionIndex);
+    setExpandedQuestionId(question.id);
+    setHighlightedQuestionId(question.id);
+
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => setHighlightedQuestionId(null), 1800);
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const element = questionItemRefs.current[question.id];
+        element?.scrollIntoView({ behavior: "smooth", block: fullScreen ? "start" : "center" });
+        questionFocusRefs.current[question.id]?.focus({ preventScroll: true });
+      });
+    });
   }
 
   /**
@@ -1593,7 +1640,7 @@ function FiveSAuditExecution({
               <Card>
                 <CardContent className="p-4">
                   <p className="text-xs text-muted-foreground">
-                    Corrective Actions
+                    Actions
                   </p>
 
                   <p className="mt-1 text-xl font-semibold">
@@ -1804,6 +1851,7 @@ function FiveSAuditExecution({
                 )
               }
               onEvidenceUpload={(event) => handleEvidenceUpload(activeActionQuestion.id, event)}
+              onTakePhoto={() => setCameraQuestionId(activeActionQuestion.id)}
               onEvidenceRemove={(evidenceId) => removeEvidence(activeActionQuestion.id, evidenceId)}
               onEvidencePreview={(evidence) => { setPreviewZoom(1); setPreviewEvidence(evidence); }}
               saving={actionSaving}
@@ -1816,6 +1864,13 @@ function FiveSAuditExecution({
           onOpenChange={setShowCompleteConfirmation}
           onComplete={handleCompleteAudit}
         />
+        <PendingQuestionsDialog
+          open={showPendingQuestions}
+          questions={pendingRequiredQuestions}
+          onOpenChange={setShowPendingQuestions}
+          onNavigate={navigateToPendingQuestion}
+        />
+        <OperationalPhotoCaptureDialog open={cameraQuestionId !== null} title="Take Evidence Photo" description="Capture evidence of the current workplace condition." onOpenChange={(open) => { if (!open) setCameraQuestionId(null); }} onUsePhoto={(photo) => { if (cameraQuestionId) void handleCameraPhoto(cameraQuestionId, photo); }} />
       </div>
     );
   }
@@ -1850,7 +1905,7 @@ function FiveSAuditExecution({
           ) : (
             <div className="flex shrink-0 gap-1">
               <Button type="button" variant="ghost" size="icon" className="size-11" onClick={handleSaveDraft} disabled={saving} aria-label={saving ? "Saving audit" : "Save audit draft"}><Save className="size-4" /></Button>
-              <Button type="button" className="min-h-11" onClick={() => setShowReview(true)}>{t("audit.review")}</Button>
+                <Button type="button" className="min-h-11" onClick={requestAuditReview}>{t("audit.review")}</Button>
             </div>
           )}
         </div>
@@ -1890,7 +1945,7 @@ function FiveSAuditExecution({
                   <Save className="mr-2 size-4" />
                   {saving ? "Saving..." : draftSaved ? `✓ ${t("common.save")}` : t("audit.saveDraft")}
                 </Button>
-                <Button type="button" onClick={() => setShowReview(true)}>
+                <Button type="button" onClick={requestAuditReview}>
                   {t("audit.review")}
                 </Button>
               </>
@@ -2050,13 +2105,14 @@ function FiveSAuditExecution({
                           <div
                             key={question.id}
                             ref={(element) => { questionItemRefs.current[question.id] = element; }}
-                            className="relative min-w-0 scroll-mt-20 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden"
+                            className={`relative min-w-0 scroll-mt-24 rounded-lg pl-8 transition-[box-shadow,background-color] before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden ${highlightedQuestionId === question.id ? "bg-primary/[0.04] ring-2 ring-primary/35 ring-offset-2" : ""}`}
                           >
                             <span role="img" aria-label={state.score !== null ? "Answered" : "Not started"} className={`absolute left-0 top-3.5 z-10 flex size-6 items-center justify-center rounded-full border bg-background ${state.score === 2 ? "border-emerald-500 text-emerald-600" : state.score === 1 ? "border-amber-500 text-amber-600" : state.score === 0 ? "border-red-500 text-red-600" : "border-border text-muted-foreground"}`}>
                               {complete ? <Check className="size-3.5" /> : state.score === 0 ? <AlertCircle className="size-3.5" /> : <span className="size-1.5 rounded-full bg-current" />}
                             </span>
                             <div className="flex min-w-0 items-start gap-1">
                             <button
+                              ref={(element) => { questionFocusRefs.current[question.id] = element; }}
                               type="button"
                               aria-expanded="false"
                               aria-controls={`audit-question-panel-${question.id}`}
@@ -2065,7 +2121,7 @@ function FiveSAuditExecution({
                             >
                               <span className="pt-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">{String(questionIndex + 1).padStart(2, "0")}</span>
                               <span className="min-w-0 flex-1">
-                                <span className="block whitespace-normal break-words text-sm font-medium leading-5 [overflow-wrap:anywhere]">{auditQuestionText(language, activeSection.category, questionIndex, question.question)}</span>
+                                <span className="block whitespace-normal break-words text-sm font-medium leading-5 [overflow-wrap:anywhere]">{auditQuestionText(language, activeSection.category, questionIndex, question.question)}{question.required !== false && <RequiredMark />}</span>
                                 <span className="mt-1 block text-xs text-muted-foreground md:text-[11px]">
                                   {state.observation.trim() ? t("audit.observationAdded") : t("audit.noObservation")}
                                   {state.actionId ? ` · ${t("audit.oneAction")}` : ""}
@@ -2089,7 +2145,7 @@ function FiveSAuditExecution({
                             question.id
                           }
                           ref={(element) => { questionItemRefs.current[question.id] = element; }}
-                          className={`relative min-w-0 scroll-mt-24 pl-8 before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden ${navigationDirection === "forward" ? "motion-question-forward" : "motion-question-backward"}`}
+                          className={`relative min-w-0 scroll-mt-24 rounded-lg pl-8 transition-[box-shadow,background-color] before:absolute before:bottom-[-0.75rem] before:left-[11px] before:top-8 before:w-px before:bg-border last:before:hidden ${navigationDirection === "forward" ? "motion-question-forward" : "motion-question-backward"} ${highlightedQuestionId === question.id ? "bg-primary/[0.04] ring-2 ring-primary/35 ring-offset-2" : ""}`}
                         >
                           {/* QUESTION */}
 
@@ -2100,6 +2156,7 @@ function FiveSAuditExecution({
                           <div className="min-w-0 rounded-lg border border-primary/35 bg-primary/[0.018] p-4 shadow-sm">
                           <div className="flex min-w-0 items-start gap-1">
                           <button
+                            ref={(element) => { questionFocusRefs.current[question.id] = element; }}
                             type="button"
                             aria-expanded="true"
                             aria-controls={`audit-question-panel-${question.id}`}
@@ -2117,6 +2174,7 @@ function FiveSAuditExecution({
                                     {
                                       auditQuestionText(language, activeSection.category, questionIndex, question.question)
                                     }
+                                    {question.required !== false && <RequiredMark />}
                                   </p>
 
                                   {question.description && (
@@ -2241,12 +2299,7 @@ function FiveSAuditExecution({
                                   htmlFor={`observation-${question.id}`}
                                   className="text-xs font-medium"
                                 >
-                                  {t("audit.observation")} <span className="font-normal text-muted-foreground">({requiresAction ? t("common.required") : t("common.optional")})</span>
-                                  {requiresAction && (
-                                    <span className="ml-1 text-destructive">
-                                      *
-                                    </span>
-                                  )}
+                                  {t("audit.observation")}{requiresAction ? <RequiredMark /> : <span className="font-normal text-muted-foreground"> ({t("common.optional")})</span>}
                                 </label>
                                 <span className="text-xs tabular-nums text-muted-foreground md:text-[11px]">
                                   {state.observation.length} / 1000
@@ -2316,7 +2369,7 @@ function FiveSAuditExecution({
                                       <div><dt className="text-muted-foreground">Priority</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.priority === "Critical" || createdAction.priority === "High" ? "danger" : createdAction.priority === "Medium" ? "warning" : "info"}>{createdAction.priority}</Badge></dd></div>
                                       <div><dt className="text-muted-foreground">Due</dt><dd className="mt-0.5 font-medium">{new Date(`${createdAction.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</dd></div>
                                       <div><dt className="text-muted-foreground">Status</dt><dd className="mt-0.5"><Badge size="sm" variant={createdAction.status === "Completed" ? "success" : createdAction.status === "Overdue" || createdAction.status === "Rework Required" ? "danger" : createdAction.status === "In Progress" || createdAction.status === "Awaiting Review" ? "warning" : "info"}>{createdAction.status}</Badge></dd></div>
-                                      {createdAction.actionCategory && <div className="min-w-0"><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 truncate font-medium">{createdAction.actionCategory}</dd></div>}
+                                      {createdAction.actionCategory && <div className="min-w-0"><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 truncate font-medium">{getActionCategoryDisplay(createdAction)}</dd></div>}
                                       {createdAction.issueEvidence?.length ? <div><dt className="text-muted-foreground">Evidence</dt><dd className="mt-0.5 font-medium">{createdAction.issueEvidence.length} attached</dd></div> : null}
                                     </dl>
                                     <div className="mt-3 flex justify-end border-t border-border/60 pt-2">
@@ -2383,29 +2436,6 @@ function FiveSAuditExecution({
                                       }
                                     />
 
-                                    <input
-                                      ref={(
-                                        element
-                                      ) => {
-                                        cameraInputRefs.current[
-                                          question.id
-                                        ] =
-                                          element;
-                                      }}
-                                      type="file"
-                                      accept="image/*"
-                                      capture="environment"
-                                      className="hidden"
-                                      onChange={(
-                                        event
-                                      ) =>
-                                        handleEvidenceUpload(
-                                          question.id,
-                                          event
-                                        )
-                                      }
-                                    />
-
                                     <Button
                                       type="button"
                                       size="sm"
@@ -2428,14 +2458,11 @@ function FiveSAuditExecution({
                                       variant="outline"
                                       className="order-1 min-h-11 sm:order-2 md:min-h-8"
                                       disabled={!questionUnlocked}
-                                      onClick={() =>
-                                        cameraInputRefs.current[
-                                          question.id
-                                        ]?.click()
-                                      }
+                                      onClick={() => setCameraQuestionId(question.id)}
+                                      aria-label="Take evidence photo"
                                     >
                                       <Camera className="mr-1.5 size-3.5" />
-                                      {t("common.camera")}
+                                      Take Photo
                                     </Button>
                                   </div>
                                 </div>
@@ -2537,7 +2564,7 @@ function FiveSAuditExecution({
           <Button type="button" variant="outline" className="min-h-11 md:min-h-9" disabled={activeSectionIndex === 0 && activeQuestionIndex === 0} onClick={() => navigateQuestion(-1)}>Previous</Button>
           <p className="hidden text-xs text-muted-foreground sm:block">{auditSectionName(language, activeSection.category)} · Question {activeQuestionIndex + 1} of {activeSection.questions.length}</p>
           {isFinalQuestion ? (
-            <Button type="button" className="min-h-11 md:min-h-9" disabled={!auditReadyForCompletion || !isQuestionComplete(activeSection.questions[activeQuestionIndex])} onClick={requestAuditCompletion}>
+            <Button type="button" className="min-h-11 md:min-h-9" onClick={requestAuditCompletion}>
               <CheckCircle2 className="size-4" />
               Submit Audit
             </Button>
@@ -2574,11 +2601,20 @@ function FiveSAuditExecution({
               )
             }
             onEvidenceUpload={(event) => handleEvidenceUpload(activeActionQuestion.id, event)}
+            onTakePhoto={() => setCameraQuestionId(activeActionQuestion.id)}
             onEvidenceRemove={(evidenceId) => removeEvidence(activeActionQuestion.id, evidenceId)}
             onEvidencePreview={(evidence) => { setPreviewZoom(1); setPreviewEvidence(evidence); }}
             saving={actionSaving}
           />
         )}
+
+      <PendingQuestionsDialog
+        open={showPendingQuestions}
+        questions={pendingRequiredQuestions}
+        onOpenChange={setShowPendingQuestions}
+        onNavigate={navigateToPendingQuestion}
+      />
+      <OperationalPhotoCaptureDialog open={cameraQuestionId !== null} title="Take Evidence Photo" description="Capture evidence of the current workplace condition." onOpenChange={(open) => { if (!open) setCameraQuestionId(null); }} onUsePhoto={(photo) => { if (cameraQuestionId) void handleCameraPhoto(cameraQuestionId, photo); }} />
 
       <Dialog
         open={previewEvidence !== null}
@@ -2754,6 +2790,7 @@ interface ActionDialogProps {
     updates: Partial<QuestionState>
   ) => void;
   onEvidenceUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onTakePhoto: () => void;
   onEvidenceRemove: (evidenceId: string) => void;
   onEvidencePreview: (evidence: FiveSEvidence) => void;
   saving: boolean;
@@ -2767,13 +2804,13 @@ function ActionDialog({
   onCreate,
   onUpdate,
   onEvidenceUpload,
+  onTakePhoto,
   onEvidenceRemove,
   onEvidencePreview,
   saving,
 }: ActionDialogProps) {
   const { actionCategoryLabel, t } = useI18n();
   const evidenceInputRef = useRef<HTMLInputElement | null>(null);
-  const evidenceCameraRef = useRef<HTMLInputElement | null>(null);
   const requiresAction =
     state.score === 0 ||
     state.score === 1;
@@ -2855,7 +2892,7 @@ function ActionDialog({
           <div className="space-y-4">
             <div>
               <label className="text-xs font-medium">
-                {t("action.title")}
+                {t("action.title")}<RequiredMark />
               </label>
 
               <Input
@@ -2903,7 +2940,7 @@ function ActionDialog({
             <div>
               <div className="flex items-center justify-between gap-3">
                 <label className="text-xs font-medium" htmlFor={`proposed-action-${question.id}`}>
-                  Proposed Action <span className="text-destructive">*</span>
+                  Proposed Action<RequiredMark />
                 </label>
                 <span className="text-xs tabular-nums text-muted-foreground md:text-[10px]">{state.proposedAction.length} / 500</span>
               </div>
@@ -2917,7 +2954,7 @@ function ActionDialog({
                 className="mt-1.5 min-h-24"
                 disabled={!canEditCreatedAction}
               />
-              <p className="mt-1.5 text-xs text-muted-foreground md:text-[11px]">Recommend the corrective action required for this finding.</p>
+              <p className="mt-1.5 text-xs text-muted-foreground md:text-[11px]">Recommend the Action required for this finding.</p>
             </div>
 
             <div className={`rounded-lg border p-4 ${requiresAction && state.evidence.length === 0 ? "border-destructive/45 bg-destructive/[0.035]" : "bg-muted/10"}`}>
@@ -2925,15 +2962,14 @@ function ActionDialog({
                 <div>
                   <div className="flex items-center gap-2">
                     <FileText className="size-4 text-muted-foreground" />
-                    <p className="text-xs font-medium">{t("action.originalEvidence")} {requiresAction ? <span className="text-destructive">*</span> : <span className="font-normal text-muted-foreground">({t("common.optional")})</span>}</p>
+                    <p className="text-xs font-medium">{t("action.originalEvidence")}{requiresAction ? <RequiredMark /> : <span className="font-normal text-muted-foreground"> ({t("common.optional")})</span>}</p>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground md:text-[11px]">{t("action.evidenceHelp")}</p>
                 </div>
                 {canEditCreatedAction && <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                   <input ref={evidenceInputRef} type="file" accept="image/*,.pdf,.doc,.docx" className="hidden" onChange={onEvidenceUpload} />
-                  <input ref={evidenceCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onEvidenceUpload} />
                   <Button type="button" size="sm" variant="outline" className="order-2 min-h-11 flex-1 sm:order-1 sm:flex-none md:min-h-8" onClick={() => evidenceInputRef.current?.click()}><Upload className="mr-1.5 size-3.5" /> {t("common.upload")}</Button>
-                  <Button type="button" size="sm" variant="outline" className="order-1 min-h-11 flex-1 sm:order-2 sm:flex-none md:min-h-8" onClick={() => evidenceCameraRef.current?.click()}><Camera className="mr-1.5 size-3.5" /> {t("common.camera")}</Button>
+                  <Button type="button" size="sm" variant="outline" className="order-1 min-h-11 flex-1 sm:order-2 sm:flex-none md:min-h-8" onClick={onTakePhoto} aria-label="Take evidence photo"><Camera className="mr-1.5 size-3.5" /> Take Photo</Button>
                 </div>}
               </div>
               {state.evidence.length > 0 ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{state.evidence.map((evidence) => <div key={evidence.id} className="flex min-w-0 items-center gap-2 rounded-lg border bg-background p-2"><button type="button" className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onEvidencePreview(evidence)}>{evidence.type === "image" ? <img src={evidence.dataUrl} alt="" className="size-11 shrink-0 rounded object-cover" /> : <span className="grid size-11 shrink-0 place-items-center rounded bg-muted"><FileText className="size-5" /></span>}<span className="min-w-0"><span className="block truncate text-xs font-medium">{evidence.name}</span><span className="text-xs text-muted-foreground md:text-[10px]">{getEvidenceFileLabel(evidence)} · {formatEvidenceSize(evidence.size)}</span></span></button>{canEditCreatedAction && <Button type="button" size="icon-sm" className="size-11 md:size-8" variant="ghost" onClick={() => onEvidenceRemove(evidence.id)} aria-label={`Remove ${evidence.name}`}><Trash2 className="size-3.5" /></Button>}</div>)}</div> : requiresAction && <p className="mt-3 text-xs font-medium text-destructive md:text-[11px]">At least one evidence attachment is required for Non-Compliance or Partial Compliance.</p>}
@@ -2941,18 +2977,19 @@ function ActionDialog({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-medium">
-                  {t("action.category")} <span className="text-destructive">*</span>
+                <label htmlFor="action-category" className="text-xs font-medium">
+                  {t("action.category")}<RequiredMark />
                 </label>
 
                 <Select
                   value={state.actionCategory}
                   onValueChange={(value) => {
-                    onUpdate({ actionCategory: value ?? "" });
+                    const actionCategory = value ?? "";
+                    onUpdate({ actionCategory, ...(actionCategory === "Other" ? {} : { customActionCategory: "" }) });
                   }}
                   disabled={!canEditCreatedAction}
                 >
-                  <SelectTrigger className="mt-1.5 w-full" aria-required="true" aria-invalid={!state.actionCategory}>
+                  <SelectTrigger id="action-category" className="mt-1.5 w-full" aria-required="true" aria-invalid={!state.actionCategory}>
                     <SelectValue placeholder={t("action.selectCategory")} />
                   </SelectTrigger>
                   <SelectContent>
@@ -2960,6 +2997,25 @@ function ActionDialog({
                   </SelectContent>
                 </Select>
                 <p className={`mt-1.5 text-[11px] ${state.actionCategory ? "text-muted-foreground" : "font-medium text-destructive"}`}>{t("action.categoryRequired")}</p>
+                {state.actionCategory === "Other" && (
+                  <div className="mt-3">
+                    <label htmlFor="custom-action-category" className="text-xs font-medium">
+                      Specify Action Category<RequiredMark />
+                    </label>
+                    <Input
+                      id="custom-action-category"
+                      value={state.customActionCategory}
+                      onChange={(event) => onUpdate({ customActionCategory: event.target.value })}
+                      placeholder="Enter action category"
+                      className="mt-1.5"
+                      required
+                      aria-invalid={!state.customActionCategory.trim()}
+                      aria-describedby="custom-action-category-error"
+                      disabled={!canEditCreatedAction}
+                    />
+                    {!state.customActionCategory.trim() && <p id="custom-action-category-error" className="mt-1.5 text-[11px] font-medium text-destructive">Enter an action category.</p>}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -2996,7 +3052,7 @@ function ActionDialog({
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs font-medium">Due Date</label>
+                <label className="text-xs font-medium">Due Date<RequiredMark /></label>
                 <Input
                   type="date"
                   value={state.dueDate}
@@ -3015,7 +3071,7 @@ function ActionDialog({
 
             {requiresAction && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-                Corrective action is
+                Action is
                 mandatory because this
                 question received a
                 score of{" "}
@@ -3046,6 +3102,7 @@ function ActionDialog({
                 !state.actionTitle.trim() ||
                 !state.proposedAction.trim() ||
                 !state.actionCategory ||
+                !isActionCategoryValid(state.actionCategory, state.customActionCategory) ||
                 dueDateInvalid ||
                 (requiresAction && state.evidence.length === 0)
               }
@@ -3073,6 +3130,59 @@ function ActionDialog({
         </div>
       </div>
     </div>
+  );
+}
+
+function PendingQuestionsDialog({
+  open,
+  questions,
+  onOpenChange,
+  onNavigate,
+}: {
+  open: boolean;
+  questions: PendingRequiredQuestion[];
+  onOpenChange: (open: boolean) => void;
+  onNavigate: (question: PendingRequiredQuestion) => void;
+}) {
+  const visibleQuestions = questions.slice(0, 5);
+  const remainingCount = Math.max(0, questions.length - visibleQuestions.length);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="!w-[calc(100vw-24px)] !max-w-md overflow-hidden p-5 sm:!w-[calc(100vw-48px)] sm:p-6">
+        <DialogHeader>
+          <DialogTitle>Pending Questions</DialogTitle>
+          <DialogDescription>
+            {questions.length === 1
+              ? "1 required question still needs to be completed before you can finish this audit."
+              : `${questions.length} required questions still need to be completed before you can finish this audit.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-64 space-y-2 overflow-y-auto pr-1" aria-label="Pending required questions">
+          {visibleQuestions.map((question) => (
+            <button
+              key={question.id}
+              type="button"
+              className="flex min-h-11 w-full items-start gap-3 rounded-lg border bg-muted/15 px-3 py-2.5 text-left transition-colors hover:border-primary/35 hover:bg-primary/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onNavigate(question)}
+            >
+              <span className="shrink-0 text-xs font-semibold text-primary">Q{question.number}</span>
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-muted-foreground">{question.section}</span>
+                <span className="mt-0.5 line-clamp-2 block text-sm font-medium leading-5">{question.text}</span>
+              </span>
+            </button>
+          ))}
+          {remainingCount > 0 && <p className="px-3 pt-1 text-xs font-medium text-muted-foreground">+ {remainingCount} more pending {remainingCount === 1 ? "question" : "questions"}</p>}
+        </div>
+
+        <DialogFooter className="mt-1">
+          <Button type="button" variant="outline" className="min-h-11 w-full sm:w-auto" onClick={() => onOpenChange(false)}>Continue Audit</Button>
+          <Button type="button" className="min-h-11 w-full sm:w-auto" disabled={!questions[0]} onClick={() => questions[0] && onNavigate(questions[0])}>Go to First Pending Question</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -10,10 +10,10 @@ describe("Audit Configuration navigation ownership", () => {
     expect(source).toContain('aria-label="Restore demo data"');
     expect(source).toContain("handleRestoreDemoData");
     expect(source).toContain("canManageQuestions && <Tooltip>");
-    expect(source).toContain('aria-label="Audit Configuration"');
-    expect(source).toContain("<TooltipContent>Audit Configuration</TooltipContent>");
+    expect(source).toContain('aria-label="5S Question Configuration"');
+    expect(source).toContain("<TooltipContent>5S Question Configuration</TooltipContent>");
     expect(source).toContain('router.push("/5s/audits/configuration")');
-    expect(source.indexOf('aria-label="Restore demo data"')).toBeLessThan(source.indexOf('aria-label="Audit Configuration"'));
+    expect(source.indexOf('aria-label="Restore demo data"')).toBeLessThan(source.indexOf('aria-label="5S Question Configuration"'));
   });
 
   it("uses the existing permission and Admin role for visibility", () => {

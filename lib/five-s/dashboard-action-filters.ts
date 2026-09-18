@@ -1,6 +1,7 @@
 import type { MyAction } from "@/features/five-s/types/my-actions";
 import { FIVE_S_ZONE_CONFIGURATION } from "@/lib/five-s/configuration";
 import { getActionStatusLabel } from "@/lib/five-s/lifecycle-status";
+import { getActionCategoryDisplay } from "@/lib/five-s/action-category";
 
 export interface DashboardZoneMember {
   id: string;
@@ -50,7 +51,7 @@ export function searchNCActions(actions: MyAction[], query: string) {
   const search = query.trim().toLowerCase();
   if (!search) return actions;
   return actions.filter((action) =>
-    `${action.id} ${action.auditId ?? action.sourceTitle} ${action.category ?? ""} ${action.area} ${action.responsiblePersonName ?? action.assignedTo} ${action.priority} ${getActionStatusLabel(action.status)}`
+    `${action.id} ${action.auditId ?? action.sourceTitle} ${action.category ?? ""} ${getActionCategoryDisplay(action, "")} ${action.area} ${action.responsiblePersonName ?? action.assignedTo} ${action.priority} ${getActionStatusLabel(action.status)}`
       .toLowerCase()
       .includes(search)
   );
@@ -59,4 +60,24 @@ export function searchNCActions(actions: MyAction[], query: string) {
 export function selectActionsByIds(actions: MyAction[], selectedIds: string[]) {
   const selected = new Set(selectedIds);
   return actions.filter((action) => selected.has(action.id));
+}
+
+export function reconcileSelectedActionIds(selectedIds: string[], visibleActions: MyAction[]) {
+  const visibleIds = new Set(visibleActions.map((action) => action.id));
+  return selectedIds.filter((id) => visibleIds.has(id));
+}
+
+export function getSelectionState(selectedIds: string[], visibleActions: MyAction[]) {
+  const selectedCount = reconcileSelectedActionIds(selectedIds, visibleActions).length;
+  return {
+    selectedCount,
+    allSelected: visibleActions.length > 0 && selectedCount === visibleActions.length,
+    someSelected: selectedCount > 0 && selectedCount < visibleActions.length,
+  };
+}
+
+export function toggleAllVisibleActionIds(selectedIds: string[], visibleActions: MyAction[]) {
+  const { allSelected } = getSelectionState(selectedIds, visibleActions);
+  if (allSelected) return [];
+  return visibleActions.map((action) => action.id);
 }

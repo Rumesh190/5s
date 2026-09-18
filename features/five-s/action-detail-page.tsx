@@ -25,6 +25,8 @@ import {
 import { PageContainer } from "@/components/layout/page-container";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RequiredMark } from "@/components/ui/required-mark";
+import { getActionCategoryDisplay } from "@/lib/five-s/action-category";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -174,7 +176,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
               ? "Awaiting Zone Leader review"
               : action.status === "Rework Required"
                 ? "Address the review feedback and resubmit"
-                : "Track the assigned corrective action";
+                : "Track the assigned Action";
   const roleContext = canReview || canAssign
     ? "Your role: Zone Leader · Assignment and review controls are available when this action reaches your step."
     : isResponsible
@@ -277,9 +279,9 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
       {canAssign && <Panel title="Action Plan Assignment" icon={<ClipboardCheck className="size-4 text-primary" />}>
         <div className="grid gap-5">
           <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Finding</p><p className="mt-2 text-sm font-medium leading-6">{action.originalFinding ?? action.description}</p></div>
-          <div><div className="flex items-center justify-between gap-3"><label htmlFor="assignment-action-plan" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Auditor&apos;s Proposed Action</label><span className="text-[10px] tabular-nums text-muted-foreground">{assignmentPlan.length} / 500</span></div><Textarea id="assignment-action-plan" rows={4} maxLength={500} className="mt-2 min-h-24" value={assignmentPlan} onChange={(event)=>setAssignmentPlan(event.target.value)} /><p className="mt-1.5 text-xs text-muted-foreground">Review and refine this plan before assigning it. The auditor&apos;s original proposal remains preserved.</p></div>
+          <div><div className="flex items-center justify-between gap-3"><label htmlFor="assignment-action-plan" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Action Plan<RequiredMark /></label><span className="text-[10px] tabular-nums text-muted-foreground">{assignmentPlan.length} / 500</span></div><Textarea id="assignment-action-plan" rows={4} maxLength={500} className="mt-2 min-h-24" value={assignmentPlan} onChange={(event)=>setAssignmentPlan(event.target.value)} /><p className="mt-1.5 text-xs text-muted-foreground">Review and refine this plan before assigning it. The auditor&apos;s original proposal remains preserved.</p></div>
           <div className="grid gap-4 sm:grid-cols-3"><Meta label="Priority" value={action.priority}/><Meta label="Due Date" value={formatDate(action.dueDate)}/><Meta label="Proposed By" value={action.proposedActionByName ?? action.createdByName ?? action.auditor ?? "—"}/></div>
-          <div className="flex flex-col gap-3 sm:flex-row"><Select value={assigneeId} onValueChange={(value)=>setAssigneeId(value??"")}><SelectTrigger className="w-full"><SelectValue placeholder="Select responsible person" /></SelectTrigger><SelectContent>{zoneConfiguration.members.map((member)=><SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select><Button disabled={!assigneeId || !assignmentPlan.trim()} onClick={()=>assignActionToZoneMember(action.id, actor, { memberId: assigneeId, actionPlan: assignmentPlan })}>Assign Action</Button></div>
+          <div className="grid gap-2"><label className="text-sm font-medium">Responsible Zone Member<RequiredMark /></label><div className="flex flex-col gap-3 sm:flex-row"><Select value={assigneeId} onValueChange={(value)=>setAssigneeId(value??"")}><SelectTrigger className="w-full" aria-required="true"><SelectValue placeholder="Select Responsible Member" /></SelectTrigger><SelectContent>{zoneConfiguration.members.map((member)=><SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent></Select><Button disabled={!assigneeId || !assignmentPlan.trim()} onClick={()=>assignActionToZoneMember(action.id, actor, { memberId: assigneeId, actionPlan: assignmentPlan })}>Assign Action</Button></div></div>
         </div>
       </Panel>}
 
@@ -304,7 +306,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             <div className="grid gap-5">
               <div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Related Audit Question</p><p className="mt-2 text-sm font-medium leading-6">{action.questionText ?? "No related audit question recorded."}</p></div>
               <div className="rounded-lg border-l-4 border-red-500 bg-red-500/[0.045] px-4 py-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">Finding</p><p className="mt-2 text-base font-medium leading-7">{action.originalFinding ?? action.description}</p></div>
-              <div className="grid gap-4 border-t pt-4 sm:grid-cols-3"><Meta label="Compliance" value="Corrective action required" /><Meta label="Observed By" value={action.createdByName ?? action.auditor ?? "—"} /><Meta label="Observed On" value={formatDateTime(action.createdAt)} /></div>
+              <div className="grid gap-4 border-t pt-4 sm:grid-cols-3"><Meta label="Compliance" value="Action required" /><Meta label="Observed By" value={action.createdByName ?? action.auditor ?? "—"} /><Meta label="Observed On" value={formatDateTime(action.createdAt)} /></div>
               <div className="grid gap-4 border-t pt-4 sm:grid-cols-2"><div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Auditor&apos;s Proposed Action</p><p className="mt-2 text-sm leading-6">{action.proposedAction ?? action.description}</p><p className="mt-1 text-xs text-muted-foreground">Proposed by {action.proposedActionByName ?? action.createdByName ?? action.auditor ?? "—"}{action.proposedActionAt ? ` · ${formatDateTime(action.proposedActionAt)}` : ""}</p></div><div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Final Action Plan</p><p className="mt-2 text-sm font-semibold leading-6">{action.actionPlan ?? action.proposedAction ?? action.description}</p>{action.actionPlanEditedByName && <p className="mt-1 text-xs text-muted-foreground">Edited by {action.actionPlanEditedByName}{action.actionPlanEditedAt ? ` · ${formatDateTime(action.actionPlanEditedAt)}` : ""}</p>}</div></div>
               <div className="border-t pt-4">
                 <EvidenceSection eyebrow="Before" title="Original Finding Evidence" description="Read-only evidence captured by the auditor when this action was raised." evidence={action.issueEvidence ?? []} onPreview={setPreview} />
@@ -343,7 +345,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             )}
           <div className={`space-y-4 transition-[filter,opacity] ${canStart ? "pointer-events-none select-none blur-[2px] opacity-40" : ""}`} aria-disabled={canStart || undefined}>
             <div>
-              <label htmlFor="resolution-observation" className="text-sm font-medium">Corrective Measure / Observation</label>
+              <label htmlFor="resolution-observation" className="text-sm font-medium">Corrective Measure / Observation<RequiredMark /></label>
               {canEdit ? (
                 <Textarea id="resolution-observation" className="mt-2 min-h-28" value={observation} onChange={(event) => setObservation(event.target.value)} placeholder="Describe what you did to resolve the issue..." />
               ) : (
@@ -353,10 +355,10 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-sm font-medium">Corrective Action Category</label>
+                <label className="text-sm font-medium">Corrective Action Category<RequiredMark /></label>
                 {canEdit ? (
                   <Select value={category} onValueChange={(value) => setCategory(value ?? "")}>
-                    <SelectTrigger className="mt-2 w-full"><SelectValue placeholder="Select corrective action category" /></SelectTrigger>
+                    <SelectTrigger className="mt-2 w-full"><SelectValue placeholder="Select Corrective Action Category" /></SelectTrigger>
                     <SelectContent>{FIVE_S_CORRECTIVE_ACTION_CATEGORIES.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent>
                   </Select>
                 ) : <ReadOnlyValue value={action.correctiveActionCategory ?? "—"} />}
@@ -375,8 +377,8 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium"><span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-green-600">After</span>Resolution Evidence <span className="text-destructive">*</span></p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">Take a photo showing the completed corrective action.</p>
+                  <p className="text-sm font-medium"><span className="mr-2 text-[10px] font-bold uppercase tracking-wider text-green-600">After</span>Resolution Evidence<RequiredMark /></p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Take a photo showing the completed Action.</p>
                 </div>
                 {canEdit && (
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -419,7 +421,7 @@ export default function FiveSActionDetailPage({ actionId }: ActionDetailProps) {
             <DialogDescription>Explain what the responsible person needs to correct before resubmitting.</DialogDescription>
           </DialogHeader>
           <div>
-            <label htmlFor="send-back-remark" className="text-sm font-medium">Remark *</label>
+            <label htmlFor="send-back-remark" className="text-sm font-medium">Rework Comment<RequiredMark /></label>
             <Textarea id="send-back-remark" className="mt-2 min-h-28" value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="Explain what needs correction..." />
             {!remark.trim() && <p className="mt-2 text-xs text-muted-foreground">Add a rework comment before returning this action.</p>}
           </div>
@@ -527,6 +529,7 @@ function ActionSummary({ action }: { action: MyAction }) {
         <Meta label="Action ID" value={action.id} />
         <Meta label="Audit ID" value={action.sourceTitle} />
         <Meta label="5S Section" value={action.category ?? "—"} />
+        <Meta label="Action Category" value={getActionCategoryDisplay(action)} />
         <div className="grid grid-cols-2 gap-3"><Meta label="Plant" value={action.plant} /><Meta label="Zone" value={action.area} /></div>
         <Meta label="Department" value={action.department} />
         <div className="grid grid-cols-2 gap-3">

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "@/components/ui/required-mark";
 import {
   Popover,
   PopoverContent,
@@ -32,6 +33,7 @@ import { useI18n } from "@/components/preferences/use-i18n";
 
 interface FiveSAuditCreateProps {
   onBack: () => void;
+  storageError?: string;
   onStart: (audit: {
     title: string;
     plant: string;
@@ -39,7 +41,7 @@ interface FiveSAuditCreateProps {
     area: string;
     auditor: string;
     dueDate: string;
-  }) => void;
+  }) => boolean | void;
 }
 
 function formatDate(value: string, locale: string): string {
@@ -101,7 +103,7 @@ function SummaryItem({ label, value, mono = false }: { label: string; value: str
   );
 }
 
-export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreateProps) {
+export default function FiveSAuditCreate({ onBack, onStart, storageError }: FiveSAuditCreateProps) {
   const { locale, t } = useI18n();
   const currentUser = useCurrentUser();
   const createdAt = useMemo(() => new Date(), []);
@@ -144,7 +146,10 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
     if (!isValid || !selectedZone || starting) return;
 
     setStarting(true);
-    window.setTimeout(() => onStart({ title: generatedAuditTitle, plant: currentUser.plant, department: selectedZone.department, area: selectedZone.name, auditor: currentUser.name, dueDate }), 220);
+    window.setTimeout(() => {
+      const started = onStart({ title: generatedAuditTitle, plant: currentUser.plant, department: selectedZone.department, area: selectedZone.name, auditor: currentUser.name, dueDate });
+      if (started === false) setStarting(false);
+    }, 220);
   }
 
   return (
@@ -174,6 +179,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
 
       <div className="w-full px-6 py-5 lg:px-8 lg:py-6">
         <form id="five-s-audit-form" onSubmit={handleSubmit} className="mx-auto grid w-full max-w-[1600px] gap-5">
+          {storageError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"><p className="font-semibold">Storage is full</p><p className="mt-1">{storageError}</p></div>}
           <Card className="gap-0">
             <CardContent className="p-5 lg:p-6">
               <section>
@@ -184,9 +190,9 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
                   <ReadOnlyField label={t("audit.plant")} value={currentUser.plant} placeholder={t("audit.profilePlantUnavailable")} />
 
                   <div className="grid gap-2">
-                    <Label>{t("audit.zone")}</Label>
+                    <Label>{t("audit.zone")}<RequiredMark /></Label>
                     <Select value={zone} onValueChange={(value) => { setZone(value ?? ""); setZoneError(""); }}>
-                      <SelectTrigger className="h-11 min-h-11 w-full px-3">
+                      <SelectTrigger className="h-11 min-h-11 w-full px-3" aria-required="true">
                         <SelectValue placeholder={t("audit.selectZone")} />
                       </SelectTrigger>
                       <SelectContent>
@@ -217,7 +223,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
                   <ReadOnlyField label={t("audit.auditor")} value={currentUser.name} placeholder={t("audit.auditorUnavailable")} />
                   <div className="grid gap-2">
                     <div className="flex min-h-5 items-center gap-1.5">
-                      <Label htmlFor="five-s-due-date">{t("audit.dueDate")}</Label>
+                      <Label htmlFor="five-s-due-date">{t("audit.dueDate")}<RequiredMark /></Label>
                       <FieldInfo label={t("audit.dueDate")}>
                         {formatDate(defaultDueDate, locale)}. {t("audit.dueDateHelp")}
                       </FieldInfo>
@@ -225,6 +231,7 @@ export default function FiveSAuditCreate({ onBack, onStart }: FiveSAuditCreatePr
                     <Input
                       id="five-s-due-date"
                       type="date"
+                      required
                       value={dueDate}
                       min={today}
                       onChange={(event) => setDueDate(event.target.value)}

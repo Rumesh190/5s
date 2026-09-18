@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 import { GARMENT_REFERENCE_CONTENT, referenceFields } from "@/lib/five-s/reference-guides";
-import { didRequiredAnswersBecomeComplete } from "@/lib/five-s/audit-completion";
+import { didRequiredAnswersBecomeComplete, getPendingRequiredQuestionIds, isAuditQuestionComplete } from "@/lib/five-s/audit-completion";
 import { stopCameraStream, verificationIsComplete } from "@/lib/five-s/audit-verification";
 import type { FiveSCategory } from "@/features/five-s/types/five-s";
 import { DEFAULT_FIVE_S_QUESTION_TEXT } from "@/features/five-s/question-configuration/data";
@@ -143,6 +143,48 @@ describe("audit review auto-navigation transition", () => {
   });
 });
 
+describe("pending required question navigation", () => {
+  const questions = [
+    { id: "q1", required: true },
+    { id: "q2", required: false },
+    { id: "q3", required: true },
+    { id: "q4" },
+  ];
+
+  it("returns only incomplete required questions in snapshot order", () => {
+    expect(getPendingRequiredQuestionIds(questions, { q1: false, q2: false, q3: true, q4: false })).toEqual(["q1", "q4"]);
+  });
+
+  it("uses the full canonical completion rule rather than score alone", () => {
+    const question = { id: "q1" };
+    expect(isAuditQuestionComplete(question, { score: 2, observation: "", evidence: [] })).toBe(true);
+    expect(isAuditQuestionComplete(question, { score: 1, observation: "", evidence: [] })).toBe(false);
+    expect(isAuditQuestionComplete(question, { score: 1, observation: "Finding", evidence: [] })).toBe(false);
+    expect(isAuditQuestionComplete(question, { score: 1, observation: "Finding", actionId: "ACT-1", evidence: [{}] })).toBe(true);
+  });
+
+  it("does not block completion for an unanswered optional question", () => {
+    expect(getPendingRequiredQuestionIds(questions, { q1: true, q2: false, q3: true, q4: true })).toEqual([]);
+  });
+
+  it("updates live as pending questions are completed without assuming 39 questions", () => {
+    expect(getPendingRequiredQuestionIds(questions, { q1: false, q2: false, q3: false, q4: false })).toHaveLength(3);
+    expect(getPendingRequiredQuestionIds(questions, { q1: true, q2: false, q3: false, q4: false })).toEqual(["q3", "q4"]);
+    expect(getPendingRequiredQuestionIds(questions, { q1: true, q2: false, q3: true, q4: true })).toEqual([]);
+  });
+
+  it("keeps the popup, primary navigation, expansion, scroll, focus, and highlight wired", () => {
+    const execution = readFileSync(resolve("features/five-s/components/FiveSAuditExecution.tsx"), "utf8");
+    expect(execution).toContain("Pending Questions");
+    expect(execution).toContain("Go to First Pending Question");
+    expect(execution).toContain("setExpandedQuestionId(question.id)");
+    expect(execution).toContain('scrollIntoView({ behavior: "smooth"');
+    expect(execution).toContain("questionFocusRefs.current[question.id]?.focus");
+    expect(execution).toContain("setHighlightedQuestionId(question.id)");
+    expect(execution).toContain("onClick={() => onNavigate(question)}");
+  });
+});
+
 describe("final auditor verification", () => {
   it("requires both a live photo and a real signature", () => {
     expect(verificationIsComplete(null, null)).toBe(false);
@@ -162,7 +204,7 @@ describe("final auditor verification", () => {
     const execution = readFileSync(resolve("features/five-s/components/FiveSAuditExecution.tsx"), "utf8");
     const report = readFileSync(resolve("features/five-s/components/FiveSAuditReport.tsx"), "utf8");
     expect(verification).toContain("navigator.mediaDevices.getUserMedia");
-    expect(verification).toContain('facingMode: "user"');
+    expect(verification).toContain('facingMode: { ideal: "user" }');
     expect(verification).toContain("context.drawImage(video");
     expect(execution).toContain("auditorVerification,");
     expect(report).toContain("audit.auditorVerification.photo");

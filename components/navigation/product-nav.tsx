@@ -3,15 +3,13 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardCheck, MoreHorizontal } from "lucide-react"
+import { ClipboardCheck } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { isNavGroup, isNavItemActive, MAIN_NAV } from "@/lib/navigation"
 import { NotificationBell } from "@/components/navigation/notification-bell"
 import { UserMenu } from "@/components/navigation/user-menu"
 import { ThemeToggle } from "@/components/theme/theme-toggle"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 import { useI18n } from "@/components/preferences/use-i18n"
 import { navigationKey } from "@/lib/i18n"
 import { useCurrentUser } from "@/lib/current-user"
@@ -153,14 +151,12 @@ function ProductNav() {
               </Link>
             )
           })}
-          {secondaryItems.length > 0 && <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="gap-1.5 text-slate-600 dark:text-slate-400 xl:hidden" />}>
-              <MoreHorizontal className="size-4" /> {t("navigation.more")}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="w-56">
-              {secondaryItems.map((item) => { const Icon = item.icon; const active = isNavItemActive(pathname, item.href); return <DropdownMenuItem key={item.href} render={<Link href={item.href} className={cn("flex min-w-0 items-center gap-2 px-2 py-2", active && "text-[var(--brand-accent)]")} />}><Icon className="size-4 shrink-0" /><span className="break-words">{item.requiredPermission ? item.label : t(navigationKey(item.href))}</span></DropdownMenuItem> })}
-            </DropdownMenuContent>
-          </DropdownMenu>}
+          {secondaryItems.map((item) => {
+            const active = isNavItemActive(pathname, item.href)
+            const Icon = item.icon
+            const label = item.requiredPermission ? item.label : t(navigationKey(item.href))
+            return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} aria-label={label} title={label} className={cn("group relative flex h-9 items-center gap-2 rounded-md px-2 text-[13.5px] font-medium text-slate-600 outline-none transition-[background-color,color,box-shadow] duration-200 hover:bg-slate-100/80 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-[var(--brand-accent)]/60 dark:text-slate-400 dark:hover:bg-white/[0.055] dark:hover:text-slate-100 xl:px-3", active && "bg-[var(--brand-nav-soft)] text-[var(--brand-accent)] dark:bg-[var(--brand-nav-soft)] dark:text-[var(--brand-accent-light)] dark:ring-1 dark:ring-white/[0.055]")}><Icon className="size-4 shrink-0"/><span className="whitespace-nowrap">{label}</span>{active && <span className="absolute inset-x-3 -bottom-[14px] h-0.5 rounded-full bg-[var(--brand-accent)]"/>}</Link>
+          })}
         </nav>
 
         <div className="ml-auto flex items-center gap-1.5 [&_button]:text-slate-600 [&_button]:hover:bg-slate-100 [&_button]:hover:text-slate-950 dark:[&_button]:text-slate-400 dark:[&_button]:ring-1 dark:[&_button]:ring-transparent dark:[&_button]:hover:bg-white/[0.065] dark:[&_button]:hover:text-white dark:[&_button]:hover:ring-white/[0.06] [&_[data-slot=avatar-fallback]]:bg-slate-100 [&_[data-slot=avatar-fallback]]:text-slate-700 dark:[&_[data-slot=avatar]]:ring-1 dark:[&_[data-slot=avatar]]:ring-white/10 dark:[&_[data-slot=avatar-fallback]]:bg-white/[0.075] dark:[&_[data-slot=avatar-fallback]]:text-slate-100">

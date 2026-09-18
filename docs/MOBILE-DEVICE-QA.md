@@ -19,14 +19,19 @@ All results begin as **NOT TESTED**. Update this checklist only after testing th
 - [ ] NOT TESTED — Operational touch targets and adjacent-action safety.
 - [ ] NOT TESTED — Top/bottom safe areas on notched and home-indicator devices.
 - [ ] NOT TESTED — Virtual keyboard keeps focused fields, validation and actions reachable.
+- [ ] NOT TESTED — Camera permission denied, camera unavailable/in-use, retry, and loading states provide visible feedback rather than a blank preview.
+- [ ] NOT TESTED — Closing, cancelling, navigating away, accepting a photo, and unmounting stop the active camera indicator/stream.
+- [ ] NOT TESTED — Repeated taps while camera startup is in progress do not create multiple camera sessions.
 
 ## Auditor
 
 - [ ] NOT TESTED — Audit Execution with long questions, evidence and navigation.
 - [ ] NOT TESTED — Reference Guide and full-screen reference image.
 - [ ] NOT TESTED — Evidence camera launch, cancel and return.
+- [ ] NOT TESTED — Audit question and finding evidence use the rear camera in portrait and landscape; Capture, Retake, and Use Photo work without opening a file picker.
 - [ ] NOT TESTED — Preview, edit and return.
 - [ ] NOT TESTED — Front camera permission, capture, Retake and close cleanup.
+- [ ] NOT TESTED — Final Auditor Verification selects the front/selfie camera and retains photo, signature, and completion gating after capture.
 - [ ] NOT TESTED — Signature drawing, Clear, confirmation and no page scroll.
 - [ ] NOT TESTED — Complete Audit gating and completion.
 
@@ -35,6 +40,7 @@ All results begin as **NOT TESTED**. Update this checklist only after testing th
 - [ ] NOT TESTED — Action Detail hierarchy and long Action Plan.
 - [ ] NOT TESTED — Before evidence preview.
 - [ ] NOT TESTED — After camera, same-angle guidance, Retake and Use Photo.
+- [ ] NOT TESTED — Corrective Action and Red Tag After capture prefer the rear camera and preserve the Before/After comparison in portrait and landscape.
 - [ ] NOT TESTED — Background/resume while camera is open.
 - [ ] NOT TESTED — Completion comment, Save Progress and Submit.
 
@@ -56,6 +62,17 @@ All results begin as **NOT TESTED**. Update this checklist only after testing th
 - [ ] NOT TESTED — NC Export selection and filtered Select All.
 - [ ] NOT TESTED — Report navigation and actions.
 
+## Red Tag
+
+- [ ] NOT TESTED — Issue/Before photo opens the rear live camera; Capture, Retake, Use Photo, permission denial, retry, close cleanup, and back navigation work.
+- [ ] NOT TESTED — After photo opens the rear live camera and retains same-angle guidance and Before reference through Retake and Use Photo.
+
+## Continuous Improvement
+
+- [ ] NOT TESTED — Proposal Existing Photo “Take Photo” opens the rear live camera while “Upload Image” remains a separate gallery/file action.
+- [ ] NOT TESTED — Completion Evidence “Take Photo” opens the rear live camera while “Upload Photo” remains separate; capture persists through the existing workflow.
+- [ ] NOT TESTED — Both CI camera flows handle permission denial, unavailable/in-use camera, Retake, Use Photo, close cleanup, back navigation, portrait, and landscape.
+
 ## Reports
 
 - [ ] NOT TESTED — Audit Report phone reading view and long report.
@@ -65,4 +82,3 @@ All results begin as **NOT TESTED**. Update this checklist only after testing th
 - [ ] NOT TESTED — Native file Share and share cancellation.
 - [ ] NOT TESTED — Unsupported-share Download fallback and downloaded filename.
 - [ ] NOT TESTED — IQ branding, multipage content and image quality in PDF/print.
-

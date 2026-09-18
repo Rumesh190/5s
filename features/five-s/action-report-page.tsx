@@ -12,6 +12,7 @@ import { useI18n } from "@/components/preferences/use-i18n";
 import type { MyAction, MyActionActivity, MyActionEvidence } from "./types/my-actions";
 import SharedReportHeader from "./components/ReportHeader";
 import ReportPdfActions from "./components/ReportPdfActions";
+import { getActionCategoryDisplay } from "@/lib/five-s/action-category";
 
 interface Props { action: MyAction; onBack: () => void; backLabel?: string }
 
@@ -63,7 +64,7 @@ export default function FiveSActionReportPage({ action, onBack, backLabel = "Bac
       <style>{`@media print { @page { size: A4 landscape; margin: 8mm; } }`}</style>
       <div className="action-report-controls mx-auto mb-4 flex max-w-[1180px] flex-wrap items-center justify-between gap-2">
         <Button variant="ghost" onClick={onBack}><ArrowLeft className="size-4" /> {backLabel}</Button>
-        <div className="grid w-full grid-cols-3 gap-2 md:flex md:w-auto md:flex-wrap md:justify-end"><Button className="min-h-11 md:min-h-9" onClick={handlePrint}><Printer className="size-4" /> Print</Button><ReportPdfActions selector=".completed-action-report" filename={`IQ-Corrective-Action-${action.id}.pdf`} title={`IQ Corrective Action Report - ${action.id}`} /></div>
+        <div className="grid w-full grid-cols-3 gap-2 md:flex md:w-auto md:flex-wrap md:justify-end"><Button className="min-h-11 md:min-h-9" onClick={handlePrint}><Printer className="size-4" /> Print</Button><ReportPdfActions selector=".completed-action-report" filename={`IQ-Corrective-Action-${action.id}.pdf`} title={`IQ Action Report - ${action.id}`} /></div>
       </div>
 
       <article className="mx-auto overflow-hidden rounded-xl border border-blue-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 md:hidden">
@@ -159,7 +160,7 @@ function ReportMetadata({ action, completedAt }: { action: MyAction; completedAt
     [Building2, "Plant", action.plant], [MapPin, "Zone", action.area], [Warehouse, "Department", action.department], [Sparkles, "5S Section", action.category ?? "—"], [FileText, "Audit ID", action.sourceTitle],
   ] as const;
   const secondary = [
-    ["Priority", action.priority, "text-red-600 dark:text-red-400"], ["Due Date", formatDate(action.dueDate), ""], ["Completed On", formatDate(completedAt), ""], ["Completion", shortPerformance(action.dueDate, completedAt), "text-emerald-700 dark:text-emerald-400"], ["Cost Saving", formatCurrency(action.costSaving), "text-emerald-700 dark:text-emerald-400"], ["Category", action.actionCategory ?? "—", ""], ["Classification", action.improvementClassification ?? "Improvement Case", ""], ["Theme", action.improvementTheme ?? action.title, ""],
+    ["Priority", action.priority, "text-red-600 dark:text-red-400"], ["Due Date", formatDate(action.dueDate), ""], ["Completed On", formatDate(completedAt), ""], ["Completion", shortPerformance(action.dueDate, completedAt), "text-emerald-700 dark:text-emerald-400"], ["Cost Saving", formatCurrency(action.costSaving), "text-emerald-700 dark:text-emerald-400"], ["Category", getActionCategoryDisplay(action), ""], ["Classification", action.improvementClassification ?? "Improvement Case", ""], ["Theme", action.improvementTheme ?? action.title, ""],
   ] as const;
   return <section className="report-metadata action-report-block overflow-hidden rounded-lg border border-blue-200 bg-white dark:border-slate-700 dark:bg-slate-900"><div className="metadata-primary grid grid-cols-2 divide-x divide-y divide-blue-100 dark:divide-slate-700 sm:grid-cols-5">{primary.map(([Icon, label, value]) => <div key={label} className="flex min-w-0 items-center gap-2.5 p-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"><Icon className="size-4" /></span><div className="min-w-0"><p className="text-[9px] font-bold tracking-wide text-slate-500">{label}</p><p className="mt-0.5 truncate text-xs font-bold" title={value}>{value}</p></div></div>)}</div><div className="metadata-secondary grid grid-cols-2 divide-x divide-y divide-blue-100 border-t border-blue-200 bg-slate-50/40 dark:divide-slate-700 dark:border-slate-700 dark:bg-slate-800/25 sm:grid-cols-4 lg:grid-cols-8">{secondary.map(([label, value, tone]) => <div key={label} className="min-w-0 p-2.5"><p className="text-[9px] font-medium text-slate-500">{label}</p><p className={`mt-1 text-[11px] font-bold leading-4 ${tone}`} title={value}>{value}</p></div>)}</div></section>;
 }

@@ -517,7 +517,7 @@ export default function FiveSAuditList({
             <RefreshCcw className="size-4" />
           </Button>
 
-          {canManageQuestions && <Tooltip><TooltipTrigger render={<Button type="button" variant="outline" onClick={() => router.push("/5s/audits/configuration")} aria-label="Audit Configuration" className="min-h-11 text-muted-foreground md:min-h-9" />}><Settings2 className="size-4" /><span className="hidden sm:inline">Audit Configuration</span></TooltipTrigger><TooltipContent>Audit Configuration</TooltipContent></Tooltip>}
+          {canManageQuestions && <Tooltip><TooltipTrigger render={<Button type="button" variant="outline" onClick={() => router.push("/5s/audits/configuration")} aria-label="5S Question Configuration" className="min-h-11 text-muted-foreground md:min-h-9" />}><Settings2 className="size-4" /><span className="hidden sm:inline">5S Question Configuration</span></TooltipTrigger><TooltipContent>5S Question Configuration</TooltipContent></Tooltip>}
 
           {/* Start Audit */}
 
@@ -609,7 +609,7 @@ export default function FiveSAuditList({
                     "all" ||
                   value == null
                 ) {
-                  return "All statuses";
+                  return "All Statuses";
                 }
 
                 return value;
@@ -619,7 +619,7 @@ export default function FiveSAuditList({
 
           <SelectContent>
             <SelectItem value="all">
-              All statuses
+              All Statuses
             </SelectItem>
 
             {AUDIT_LIFECYCLE_STAGES.map((stage) => <SelectItem key={stage} value={stage}>{stage}</SelectItem>)}
@@ -652,7 +652,7 @@ export default function FiveSAuditList({
                     "all" ||
                   value == null
                 ) {
-                  return "All plants";
+                  return "All Plants";
                 }
 
                 return value;
@@ -662,7 +662,7 @@ export default function FiveSAuditList({
 
           <SelectContent>
             <SelectItem value="all">
-              All plants
+              All Plants
             </SelectItem>
 
             {plants.map(
@@ -704,7 +704,7 @@ export default function FiveSAuditList({
                     "all" ||
                   value == null
                 ) {
-                  return "All departments";
+                  return "All Departments";
                 }
 
                 return value;
@@ -714,7 +714,7 @@ export default function FiveSAuditList({
 
           <SelectContent>
             <SelectItem value="all">
-              All departments
+              All Departments
             </SelectItem>
 
             {departments.map(

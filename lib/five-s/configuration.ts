@@ -24,6 +24,7 @@ export const FIVE_S_ACTION_CATEGORIES = [
   "Training & Knowledge Gaps",
   "Environmental Sustainability",
   "Customer Satisfaction",
+  "Other",
 ] as const;
 
 export const FIVE_S_CORRECTIVE_ACTION_CATEGORIES = [

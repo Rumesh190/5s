@@ -20,11 +20,15 @@ function load() {
   loaded = true;
   try {
     const saved = readStorageJson<RedTag[]>(KEY);
-    if (saved) tags = saved.map((tag) => ({
-      ...tag,
-      status: (tag.status as string) === "Resolved" ? "Awaiting Review" : tag.status,
-      history: Array.isArray(tag.history) ? tag.history : [],
-    }));
+    if (saved) tags = saved.map((tag) => {
+      const legacyStatus = tag.status as string;
+      const status = legacyStatus === "Resolved"
+        ? "Awaiting Review"
+        : legacyStatus === "Awaiting Assignment"
+          ? tag.responsiblePersonId || tag.responsiblePersonName ? "In Progress" : "Open"
+          : tag.status;
+      return { ...tag, status, history: Array.isArray(tag.history) ? tag.history : [] };
+    });
   } catch { /* retain demo data */ }
 }
 function emit() {
@@ -53,7 +57,7 @@ function linkedAction(tag: RedTag) { return getActions().find((action) => action
 export function assignRedTagAction(id: string, actor: RedTagActor, input: { actionPlan: string; memberId: string; dueDate: string; priority: RedTagPriority; instructions?: string }) {
   load(); const tag = tags.find((item) => item.id === id); const zone = tag && getFiveSZoneConfiguration(tag.zone);
   const member = zone?.members.find((item) => item.id === input.memberId); const plan = input.actionPlan.trim();
-  if (!tag || !zone || !zoneLeader(tag, actor) || !member || !plan || !input.dueDate || !input.priority || !["Open", "Assigned", "In Progress", "Rework Required"].includes(tag.status)) return undefined;
+  if (!tag || !zone || !zoneLeader(tag, actor) || !member || !plan || !input.dueDate || !input.priority || tag.status !== "Open") return undefined;
   const now = new Date().toISOString();
   let action = linkedAction(tag);
   if (!action) action = createAction({
@@ -63,28 +67,20 @@ export function assignRedTagAction(id: string, actor: RedTagActor, input: { acti
     assignedTo: member.name, responsiblePersonId: member.id, responsiblePersonName: member.name,
     zoneLeaderId: zone.leaderId, zoneLeaderName: zone.leader, assignedByUserId: actor.id, assignedByName: actor.name,
     assignedAt: now, createdByUserId: tag.createdById, createdByName: tag.createdByName, auditor: tag.createdByName,
-    status: "Assigned", priority: input.priority, dueDate: input.dueDate,
+    status: "In Progress", priority: input.priority, dueDate: input.dueDate,
     issueEvidence: tag.imageUrl ? [{ id: `RTE-${tag.id}`, name: "Original Red Tag photo", type: "image", uploadedAt: tag.createdAt, uploadedBy: tag.createdByName, url: tag.imageUrl }] : [],
     activityHistory: [],
   });
-  else updateAction(action.id, { actionPlan: plan, assignedTo: member.name, responsiblePersonId: member.id, responsiblePersonName: member.name, assignedByUserId: actor.id, assignedByName: actor.name, assignedAt: now, priority: input.priority, dueDate: input.dueDate, status: "Assigned" });
-  const updated = replaceTag(id, (current) => ({ ...current, status: "Assigned", actionPlan: plan, requiredAction: plan, responsiblePersonId: member.id, responsiblePersonName: member.name, dueDate: input.dueDate, targetDate: input.dueDate, priority: input.priority, instructions: input.instructions?.trim(), actionId: action?.id, zoneLeaderId: zone.leaderId, zoneLeaderName: zone.leader, assignedById: actor.id, assignedByName: actor.name, assignedAt: now, history: [...(current.history ?? []), event("planned", "Action Plan Created", actor, "Zone Leader"), event("assigned", `Assigned to ${member.name}`, actor, "Zone Leader")] }));
+  else updateAction(action.id, { actionPlan: plan, assignedTo: member.name, responsiblePersonId: member.id, responsiblePersonName: member.name, assignedByUserId: actor.id, assignedByName: actor.name, assignedAt: now, priority: input.priority, dueDate: input.dueDate, status: "In Progress" });
+  const updated = replaceTag(id, (current) => ({ ...current, status: "In Progress", actionPlan: plan, requiredAction: plan, responsiblePersonId: member.id, responsiblePersonName: member.name, dueDate: input.dueDate, targetDate: input.dueDate, priority: input.priority, instructions: input.instructions?.trim(), actionId: action?.id, zoneLeaderId: zone.leaderId, zoneLeaderName: zone.leader, assignedById: actor.id, assignedByName: actor.name, assignedAt: now, history: [...(current.history ?? []), event("planned", `Action Plan Assigned to ${member.name}`, actor, "Zone Leader")] }));
   if (updated) createNotification({ recipientUserId: member.id, title: "Red Tag action assigned", message: `${tag.tagNumber} · ${tag.itemName} · Due: ${input.dueDate}`, href: `/5s/red/${encodeURIComponent(tag.id)}` });
   return updated;
-}
-
-export function startRedTagAction(id: string, actor: RedTagActor) {
-  load();
-  const tag = tags.find((item) => item.id === id);
-  if (!tag || !responsible(tag, actor) || !["Assigned", "Rework Required"].includes(tag.status)) return undefined;
-  const action = linkedAction(tag); if (action) updateAction(action.id, { status: "In Progress" });
-  return replaceTag(id, (current) => ({ ...current, status: "In Progress", history: [...(current.history ?? []), event("started", "Work Started", actor, "Zone Member")] }));
 }
 
 export function saveRedTagClosureEvidence(id: string, actor: RedTagActor, imageUrl: string) {
   load();
   const tag = tags.find((item) => item.id === id);
-  if (!tag || !responsible(tag, actor) || !["In Progress", "Rework Required"].includes(tag.status) || !imageUrl) return undefined;
+  if (!tag || !responsible(tag, actor) || !["Assigned", "In Progress", "Rework Required"].includes(tag.status) || !imageUrl) return undefined;
   const action = linkedAction(tag); if (action) updateAction(action.id, { evidence: [...action.evidence, { id: `RTE-CLOSE-${Date.now()}`, actionId: action.id, evidenceType: "resolution", name: "Red Tag closure photo", type: "image", uploadedAt: new Date().toISOString(), uploadedBy: actor.name, url: imageUrl }] });
   return replaceTag(id, (current) => ({ ...current, closureImageUrl: imageUrl }));
 }
@@ -92,7 +88,7 @@ export function saveRedTagClosureEvidence(id: string, actor: RedTagActor, imageU
 export function submitRedTagForReview(id: string, actor: RedTagActor, completionComment: string) {
   load();
   const tag = tags.find((item) => item.id === id); const comment = completionComment.trim();
-  if (!tag || !responsible(tag, actor) || !["In Progress", "Rework Required"].includes(tag.status) || !tag.actionPlan || !tag.closureImageUrl || !comment) return undefined;
+  if (!tag || !responsible(tag, actor) || !["Assigned", "In Progress", "Rework Required"].includes(tag.status) || !tag.actionPlan || !tag.closureImageUrl || !comment) return undefined;
   const now = new Date().toISOString(); const resubmission = tag.status === "Rework Required" || Boolean(tag.submittedAt); const action = linkedAction(tag);
   if (action) updateAction(action.id, { status: "Awaiting Review", actionTakenDescription: comment, resolutionObservation: comment, submittedForReviewAt: now });
   const updated = replaceTag(id, (current) => ({ ...current, status: "Awaiting Review", completionComment: comment, submittedById: actor.id, submittedByName: actor.name, submittedAt: now, closureEvidenceHistory: [...(current.closureEvidenceHistory ?? []), { imageUrl: current.closureImageUrl!, comment, submittedByName: actor.name, submittedAt: now }], history: [...(current.history ?? []), event(resubmission ? "resubmitted" : "submitted", resubmission ? "Closure Evidence Resubmitted" : "Closure Evidence Submitted", actor, "Zone Member")] }));

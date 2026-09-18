@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RequiredMark } from "@/components/ui/required-mark";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import FiveSPageHeader from "@/features/five-s/components/FiveSPageHeader";
@@ -140,5 +141,6 @@ function EditorForm({ editor, onClose, onSave }: { editor: NonNullable<EditorSta
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="grid gap-2"><Label>{label}</Label>{children}</div>;
+  const required = ["Question", "Reference Guide Title", "Reference Guide Description", "Reference Image"].includes(label);
+  return <div className="grid gap-2"><Label>{label}{required && <RequiredMark />}</Label>{children}</div>;
 }

@@ -8,8 +8,15 @@ export const RED_TAG_SECTIONS = [
 ] as const;
 
 export type RedTagStatus = "Open" | "Assigned" | "In Progress" | "Awaiting Review" | "Rework Required" | "Closed";
+export type RedTagDisplayStatus = "Raised" | "In Progress" | "Awaiting Review" | "Rework Required" | "Closed";
 export type RedTagPriority = "Low" | "Medium" | "High" | "Critical";
 export type RedTagReason = (typeof RED_TAG_REASONS)[number];
+
+export function getRedTagDisplayStatus(status: RedTagStatus): RedTagDisplayStatus {
+  if (status === "Open") return "Raised";
+  if (status === "Assigned") return "In Progress";
+  return status;
+}
 
 export interface RedTagHistoryEvent {
   id: string;

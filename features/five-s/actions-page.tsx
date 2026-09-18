@@ -16,6 +16,7 @@ import type { MyAction, MyActionPriority, MyActionStatus } from "@/features/five
 import { useActionStore } from "@/lib/actions/action-store";
 import { useCurrentUser } from "@/lib/current-user";
 import { getFiveSZoneConfiguration } from "@/lib/five-s/configuration";
+import { getActionCategoryDisplay } from "@/lib/five-s/action-category";
 import { ACTION_LIFECYCLE_STAGES, getActionLifecycleStage, type ActionLifecycleStage } from "@/lib/five-s/lifecycle-status";
 
 const STATUS_CONFIG: Record<MyActionStatus, { label: string; variant: "success" | "warning" | "danger" | "info" | "muted" }> = {
@@ -57,7 +58,7 @@ export default function MyActionsPage() {
     return roleActions.filter((action) => {
       const matchesStatus = statusFilter === "All" || getActionLifecycleStage(action.status) === statusFilter;
       const matchesExactStatus = exactStatus === "All" || action.status === exactStatus;
-      const searchableValues = [action.title, action.description, action.sourceTitle, action.plant, action.department, action.area, action.priority];
+      const searchableValues = [action.title, action.description, action.sourceTitle, action.plant, action.department, action.area, action.priority, getActionCategoryDisplay(action, "")];
       return matchesStatus && matchesExactStatus && (!query || searchableValues.some((value) => value.toLowerCase().includes(query)));
     });
   }, [exactStatus, roleActions, search, statusFilter]);
@@ -93,7 +94,7 @@ export default function MyActionsPage() {
 
   return (
     <PageContainer>
-      <FiveSPageHeader eyebrow="5S Workspace" title="Actions" description="Manage assigned corrective actions and track them through verification and closure." />
+      <FiveSPageHeader eyebrow="5S Workspace" title="Actions" description="Manage assigned Actions and track them through verification and closure." />
 
       <p className="text-sm text-muted-foreground">Showing actions where you are the Auditor, Zone Leader, or responsible Zone Member.</p>
 
@@ -121,10 +122,10 @@ export default function MyActionsPage() {
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
           <div className="-mx-1 flex flex-1 gap-2 overflow-x-auto px-1 pb-1 pt-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
             {(["All", ...ACTION_LIFECYCLE_STAGES] as const).map((status) => (
-              <Button key={status} type="button" size="sm" className="min-h-11 shrink-0 md:min-h-8" variant={statusFilter === status ? "default" : "outline"} onClick={() => setStatusFilter(status)}>{status}</Button>
+              <Button key={status} type="button" size="sm" className="min-h-11 shrink-0 md:min-h-8" variant={statusFilter === status ? "default" : "outline"} onClick={() => setStatusFilter(status)}>{status === "All" ? "All Lifecycle Stages" : status}</Button>
             ))}
           </div>
-          <Select value={exactStatus} onValueChange={(value)=>setExactStatus((value??"All") as "All"|MyActionStatus)}><SelectTrigger className="h-11 w-full md:h-9 md:w-52" aria-label="Refine by exact action status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">All exact statuses</SelectItem>{Object.keys(STATUS_CONFIG).map((status)=><SelectItem key={status} value={status}>{STATUS_CONFIG[status as MyActionStatus].label}</SelectItem>)}</SelectContent></Select>
+          <Select value={exactStatus} onValueChange={(value)=>setExactStatus((value??"All") as "All"|MyActionStatus)}><SelectTrigger className="h-11 w-full md:h-9 md:w-52" aria-label="Refine by exact action status"><SelectValue>{(selected: string | null) => selected === "All" || selected == null ? "All Statuses" : STATUS_CONFIG[selected as MyActionStatus]?.label ?? selected}</SelectValue></SelectTrigger><SelectContent><SelectItem value="All">All Statuses</SelectItem>{Object.keys(STATUS_CONFIG).map((status)=><SelectItem key={status} value={status}>{STATUS_CONFIG[status as MyActionStatus].label}</SelectItem>)}</SelectContent></Select>
           </div>
         </CardHeader>
 
@@ -157,7 +158,7 @@ export default function MyActionsPage() {
                           <span>Responsible: {action.responsiblePersonName ?? action.assignedTo}</span>
                           <span>Raised by: {action.createdByName ?? action.auditor ?? "—"}</span>
                           {action.status === "Completed" && <span>Approved by: {action.reviewedByRole === "Zone Leader" ? action.reviewedBy : action.closedBy ?? action.zoneLeaderName ?? "—"}</span>}
-                          {action.actionCategory && <span>{action.actionCategory}</span>}
+                          {action.actionCategory && <span>{getActionCategoryDisplay(action)}</span>}
                           {action.costSaving !== undefined && <span>₹{action.costSaving.toLocaleString("en-IN")}</span>}
                           <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" />Due {action.dueDate}</span>
                         </div>
