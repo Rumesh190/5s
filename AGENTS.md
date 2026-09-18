@@ -109,6 +109,15 @@ Do not expose it as a prominent production-looking button.
 
 Use stable IDs where available; names are display values and legacy fallbacks.
 
+### MVP session policy
+
+- Authentication sessions are runtime/in-memory only; refresh or reload requires login.
+- Ten continuous minutes in a hidden tab expires the session, using timestamps and the Page Visibility API.
+- Ten minutes without meaningful interaction in a visible tab also expires the session; warn approximately one minute before this active-inactivity timeout.
+- Logout and session expiry clear authentication state only. Persisted domain records and UI preferences remain intact.
+- Protected routes require an active session in addition to their existing role authorization.
+- This is frontend MVP behavior and must later be replaced by secure server-backed authentication and session management.
+
 ## 10. Critical Business Rules
 
 - **AUDITOR DOES NOT REVIEW OR CLOSE CORRECTIVE ACTIONS.**

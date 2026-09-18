@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 
 import { useMemo, useState } from "react";
@@ -610,7 +609,6 @@ export default function FiveSDashboardPage() {
         <NCSummaryTable
           key={zoneFilter}
           actions={memberScopedActions}
-          dashboardZone={zoneFilter}
           memberFiltered={effectiveZoneMemberFilter !== "All"}
           onClearMember={() => setZoneMemberFilter("All")}
           onPreview={setPreview}
@@ -640,14 +638,9 @@ export default function FiveSDashboardPage() {
   );
 }
 
-function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember, onPreview, onOpen, onViewAction, onReport }: { actions: MyAction[]; dashboardZone:string; memberFiltered: boolean; onClearMember: () => void; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onViewAction: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
-  const zones = useMemo(() => FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name), []);
-  const [selectedZones,setSelectedZones]=useState<string[]>(()=>dashboardZone==="All"?zones:[dashboardZone]);
+function NCSummaryTable({ actions, memberFiltered, onClearMember, onPreview, onOpen, onViewAction, onReport }: { actions: MyAction[]; memberFiltered: boolean; onClearMember: () => void; onPreview: (evidence: MyActionEvidence) => void; onOpen: (action: MyAction) => void; onViewAction: (action: MyAction) => void; onReport: (action: MyAction) => void }) {
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
-  const allZonesSelected=selectedZones.length===zones.length;
-  const hasActiveFilters=!allZonesSelected;
-  const zoneLabel=allZonesSelected?"All Zones":selectedZones.length===0?"No Zones Selected":selectedZones.length<=2?selectedZones.join(" + "):`${selectedZones.length} Zones`;
-  const filteredActions=useMemo(()=>actions.filter((action)=>selectedZones.includes(action.area)),[actions,selectedZones]);
+  const filteredActions=actions;
   const selectionScope=filteredActions.map((action)=>action.id).join("\u0000");
   const [previousSelectionScope,setPreviousSelectionScope]=useState(selectionScope);
   if(selectionScope!==previousSelectionScope){
@@ -655,11 +648,10 @@ function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember,
     setSelectedIds((current)=>reconcileSelectedActionIds(current,filteredActions));
   }
   const {selectedCount,allSelected,someSelected}=getSelectionState(selectedIds,filteredActions);
-  function toggleZone(zone:string,checked:boolean){setSelectedZones(current=>checked?[...new Set([...current,zone])]:current.filter(item=>item!==zone));}
   function toggleAction(id:string,checked:boolean){setSelectedIds(current=>checked?[...new Set([...current,id])]:current.filter(item=>item!==id));}
   function toggleAll(){setSelectedIds(current=>toggleAllVisibleActionIds(current,filteredActions));}
   function exportSelected(){const selected=selectActionsByIds(filteredActions,selectedIds);if(selected.length)exportNonComplianceCsv(selected);}
-  function clearFilters(){setSelectedZones([...zones]);if(memberFiltered)onClearMember();}
+  function clearFilters(){if(memberFiltered)onClearMember();}
   const selectionLabel=`${selectedCount} of ${filteredActions.length} selected`;
   return (
     <Card className="min-w-0 overflow-hidden">
@@ -667,19 +659,12 @@ function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember,
         <div className="min-w-0"><CardTitle className="text-base">Non-Compliance Summary</CardTitle><p className="mt-1 text-sm leading-5 text-muted-foreground">Review findings, ownership, progress, evidence, and closure details in one place.</p></div>
         <CardAction className="col-start-1 row-start-2 w-full justify-self-stretch sm:col-start-2 sm:row-span-1 sm:row-start-1 sm:w-auto sm:justify-self-end">
           <div className="grid w-full grid-cols-2 gap-2 md:hidden">
-            <details className="group relative col-span-1">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-sm marker:content-none">Zone Filter <span className="text-muted-foreground transition-transform group-open:rotate-180">▾</span></summary>
-              <div className="absolute left-0 top-[calc(100%+0.5rem)] z-30 grid w-[min(20rem,calc(100vw-3rem))] gap-2 rounded-lg border bg-popover p-3 shadow-lg">
-                <DropdownMenu><DropdownMenuTrigger render={<Button type="button" variant="outline" className="min-h-11 w-full justify-between bg-background shadow-none"/>}>{zoneLabel}<span className="text-muted-foreground">▾</span></DropdownMenuTrigger><DropdownMenuContent align="start" className="w-52"><DropdownMenuCheckboxItem checked={allZonesSelected} onCheckedChange={(checked)=>setSelectedZones(checked?[...zones]:[])}>All Zones</DropdownMenuCheckboxItem>{zones.map(zone=><DropdownMenuCheckboxItem key={zone} checked={selectedZones.includes(zone)} onCheckedChange={(checked)=>toggleZone(zone,checked)}>{zone}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu>
-                <Button type="button" variant="ghost" className="min-h-11" disabled={!hasActiveFilters&&!memberFiltered} onClick={clearFilters}><RotateCcw className="size-4"/>Clear Filters</Button>
-              </div>
-            </details>
+            {memberFiltered && <Button type="button" variant="ghost" className="min-h-11" onClick={clearFilters}><RotateCcw className="size-4"/>Clear Filters</Button>}
             <Button type="button" variant="outline" className="min-h-11 w-full bg-background shadow-none" disabled={!selectedCount} onClick={exportSelected}><Download className="size-4"/>Export ({selectedCount})</Button>
             <span className="col-span-2 text-right text-xs font-medium text-muted-foreground">{selectionLabel}</span>
           </div>
           <div className="hidden w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap md:items-center md:justify-end">
-            <DropdownMenu><DropdownMenuTrigger render={<Button type="button" size="sm" variant="outline" className="col-span-2 min-w-40 justify-between bg-background shadow-none sm:col-span-1"/>}>{zoneLabel}<span className="text-muted-foreground">▾</span></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-52"><DropdownMenuCheckboxItem checked={allZonesSelected} onCheckedChange={(checked)=>setSelectedZones(checked?[...zones]:[])}>All Zones</DropdownMenuCheckboxItem>{zones.map(zone=><DropdownMenuCheckboxItem key={zone} checked={selectedZones.includes(zone)} onCheckedChange={(checked)=>toggleZone(zone,checked)}>{zone}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu>
-            <Button type="button" size="sm" variant="ghost" className="col-span-2 min-h-11 sm:col-span-1 md:min-h-8" disabled={!hasActiveFilters&&!memberFiltered} onClick={clearFilters}><RotateCcw className="size-4"/>Clear Filters</Button>
+            {memberFiltered && <Button type="button" size="sm" variant="ghost" className="col-span-2 min-h-11 sm:col-span-1 md:min-h-8" onClick={clearFilters}><RotateCcw className="size-4"/>Clear Filters</Button>}
             <span className="text-xs font-medium text-muted-foreground">{selectionLabel}</span>
             {selectedCount>0&&<Button type="button" size="sm" variant="ghost" onClick={()=>setSelectedIds([])}>Clear selection</Button>}
             <Button type="button" size="sm" variant="outline" className="col-span-2 w-full bg-background shadow-none sm:col-span-1 sm:w-auto" disabled={!selectedCount} onClick={exportSelected}><Download className="size-4" /> Export ({selectedCount})</Button>
@@ -706,7 +691,7 @@ function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember,
               <div className="mt-3 grid grid-cols-2 gap-2"><MobileEvidencePreview label="Before" evidence={before} emptyLabel="No Before Evidence" onPreview={onPreview}/><MobileEvidencePreview label="After" evidence={after} emptyLabel="Awaiting After Evidence" onPreview={onPreview}/></div>
               <div className="mt-3 grid grid-cols-2 gap-2"><Button type="button" variant="outline" className="min-h-11" onClick={()=>onViewAction(action)}>View Action</Button>{action.status==="Completed"?<Button type="button" className="min-h-11" onClick={()=>onReport(action)}>View Report</Button>:<Button type="button" variant="outline" className="min-h-11" onClick={()=>onOpen(action)}>View Evidence</Button>}</div>
             </article>;
-          }):<div className="grid min-h-48 place-items-center rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground"><div><p>{memberFiltered?"No Actions found for this Zone Member.":"No non-compliances match the selected filters."}</p>{(hasActiveFilters||memberFiltered)&&<Button type="button" variant="outline" className="mt-4 min-h-11" onClick={clearFilters}>Clear Filters</Button>}</div></div>}
+          }):<div className="grid min-h-48 place-items-center rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground"><div><p>{memberFiltered?"No Actions found for this Zone Member.":"No non-compliances match the selected filters."}</p>{memberFiltered&&<Button type="button" variant="outline" className="mt-4 min-h-11" onClick={clearFilters}>Clear Filters</Button>}</div></div>}
         </div>
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
@@ -732,7 +717,7 @@ function NCSummaryTable({ actions, dashboardZone, memberFiltered, onClearMember,
                   <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{formatDashboardDate(action.completedAt)}</td>
                   <td className="px-3 py-3"><Button type="button" size="sm" variant="ghost" onClick={() => action.status === "Completed" ? onReport(action) : onOpen(action)}>{action.status === "Completed" ? "Report" : "View"}<ExternalLink className="size-3.5" /></Button></td>
                 </tr>;
-              }) : <tr><td colSpan={12} className="px-6 py-16 text-center text-sm text-muted-foreground"><p>{memberFiltered ? "No Actions found for this Zone Member." : "No non-compliances match the selected filters."}</p>{(hasActiveFilters||memberFiltered)&&<Button type="button" size="sm" variant="ghost" className="mt-3" onClick={clearFilters}>Clear Filters</Button>}</td></tr>}
+              }) : <tr><td colSpan={12} className="px-6 py-16 text-center text-sm text-muted-foreground"><p>{memberFiltered ? "No Actions found for this Zone Member." : "No non-compliances match the selected filters."}</p>{memberFiltered&&<Button type="button" size="sm" variant="ghost" className="mt-3" onClick={clearFilters}>Clear Filters</Button>}</td></tr>}
             </tbody>
           </table>
         </div>
