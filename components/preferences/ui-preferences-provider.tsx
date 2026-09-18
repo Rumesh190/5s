@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { safeSetStorage } from "@/lib/browser-storage"
 
 import {
   DEFAULT_UI_PREFERENCES,
@@ -12,10 +13,10 @@ import {
 } from "@/lib/ui-preferences"
 
 interface UiPreferencesContextValue extends UiPreferences {
-  setNavigationPosition: (position: NavigationPosition) => void
-  setAccentColor: (color: AccentColor) => void
-  setLanguage: (language: AppLanguage) => void
-  setSidebarCollapsed: (collapsed: boolean) => void
+  setNavigationPosition: (position: NavigationPosition) => boolean
+  setAccentColor: (color: AccentColor) => boolean
+  setLanguage: (language: AppLanguage) => boolean
+  setSidebarCollapsed: (collapsed: boolean) => boolean
 }
 
 const UiPreferencesContext = React.createContext<UiPreferencesContextValue | null>(null)
@@ -55,9 +56,11 @@ function UiPreferencesProvider({ children }: { children: React.ReactNode }) {
   })
 
   function updatePreferences(next: UiPreferences) {
+    const result = safeSetStorage(UI_PREFERENCES_STORAGE_KEY, next)
+    if (!result.success) return false
     setPreferences(next)
     applyPreferences(next)
-    window.localStorage.setItem(UI_PREFERENCES_STORAGE_KEY, JSON.stringify(next))
+    return true
   }
 
   const value = React.useMemo<UiPreferencesContextValue>(() => ({
