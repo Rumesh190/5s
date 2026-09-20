@@ -16,6 +16,9 @@ import { useMemo, useState } from "react";
 
 import FiveSAuditCreate from "./components/FiveSAuditCreate";
 import FiveSAuditExecution from "./components/FiveSAuditExecution";
+import MobileDashboard from "./components/MobileDashboard";
+import type { MobileDashboardPeriod } from "./components/MobileDashboard";
+import DesktopDashboardOverview from "./components/DesktopDashboardOverview";
 
 import {
   createFiveSAudit,
@@ -23,13 +26,6 @@ import {
   useFiveSAuditStore,
 } from "@/lib/five-s/audit-store";
 import { useActionStore } from "@/lib/actions/action-store";
-import {
-  AuditScoreTrend,
-  CorrectiveActionsChart,
-  ImprovementsTrend,
-  ZonePerformanceChart,
-} from "./components/FiveSDashboardCharts";
-
 import type {
   FiveSAudit,
   FiveSCategory,
@@ -38,6 +34,7 @@ import type {
 } from "./types/five-s";
 
 import {
+  ChevronLeft,
   Download,
   ExternalLink,
   Image as ImageIcon,
@@ -527,6 +524,49 @@ export default function FiveSDashboardPage() {
 
   return (
     <PageContainer className="max-w-none">
+
+      {/* ── Mobile Dashboard (< md breakpoint) ──────────────── */}
+      {dashboardView === "overview" && (
+        <MobileDashboard
+          className="md:hidden"
+          metrics={{
+            usingSampleData: metrics.usingSampleData,
+            totalAudits: metrics.totalAudits,
+            completedAudits: metrics.completedAudits,
+            inProgressAudits: metrics.inProgressAudits,
+            draftAudits: metrics.draftAudits,
+            averageScore: metrics.averageScore,
+            openActions: metrics.openActions,
+            overdueActions: metrics.overdueActions,
+            attention: metrics.attention,
+            zonePerformance: metrics.zonePerformance,
+          }}
+          allActions={actions}
+          allAudits={audits}
+          period={period as MobileDashboardPeriod}
+          onPeriodChange={(p) => setPeriod(p)}
+          onStartAudit={handleStartAudit}
+          onViewNCSummary={() => setDashboardView("nc-summary")}
+          onViewBeforeAfter={() => setDashboardView("before-after")}
+          successMessage={successMessage}
+        />
+      )}
+
+      {/* ── Mobile Back button — shown when viewing NC Summary or Before & After ── */}
+      {dashboardView !== "overview" && (
+        <button
+          type="button"
+          className="md:hidden flex items-center gap-1.5 py-2 text-sm font-medium text-primary"
+          onClick={() => setDashboardView("overview")}
+        >
+          <ChevronLeft className="size-4" />
+          Back to Dashboard
+        </button>
+      )}
+
+      {/* ── Desktop Dashboard (>= md breakpoint) ────────────── */}
+      <div className="hidden md:contents">
+
       <FiveSPageHeader
         eyebrow="5S Workspace"
         title={t("dashboard.title")}
@@ -541,9 +581,8 @@ export default function FiveSDashboardPage() {
 
       {successMessage && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400">{successMessage}</div>}
 
-      <div className="grid min-w-0 gap-2 lg:grid-cols-[auto_minmax(0,1fr)]">
-        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl border border-border/80 bg-card p-1 shadow-sm" aria-label="Dashboard views">
-          <span className="hidden px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground xl:inline">View</span>
+      <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border/75 bg-card p-2 shadow-sm xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
+        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-muted/55 p-1" aria-label="Dashboard views">
           {([
             ["overview", t("dashboard.overview")],
             ["nc-summary", t("dashboard.ncSummary")],
@@ -554,85 +593,44 @@ export default function FiveSDashboardPage() {
             </Button>
           ))}
         </nav>
-        <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border/80 bg-card p-1 shadow-sm lg:flex-row lg:items-center lg:justify-end lg:gap-1" role="group" aria-label="Dashboard filters">
-          <span className="hidden px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground xl:inline">Filters</span>
-          <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:items-center lg:gap-1">
-            <DashboardFilter value={zoneFilter} onChange={(value) => { setZoneFilter(value); setZoneMemberFilter("All"); }} label="All Zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} />
+        <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end lg:gap-x-5" role="group" aria-label="Dashboard filters">
+          <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="Zone filters">
+            <span className="shrink-0 text-xs font-semibold text-muted-foreground">Zone</span>
+            <div className="w-40 shrink-0"><DashboardFilter value={zoneFilter} onChange={(value) => { setZoneFilter(value); setZoneMemberFilter("All"); }} label="All Zones" options={FIVE_S_ZONE_CONFIGURATION.map((zone)=>zone.name)} /></div>
             {dashboardView !== "overview" && <Select value={effectiveZoneMemberFilter} onValueChange={(value) => setZoneMemberFilter(value ?? "All")}>
-              <SelectTrigger className="h-11 w-full min-w-0 md:h-9 lg:min-w-44" aria-label="Zone Member"><SelectValue>{(selected: string | null) => selected === "All" || selected == null ? "All Zone Members" : zoneMemberOptions.find((member) => member.id === selected)?.name ?? selected}</SelectValue></SelectTrigger>
+              <SelectTrigger className="h-11 w-52 shrink-0 md:h-9" aria-label="Zone Member"><SelectValue>{(selected: string | null) => selected === "All" || selected == null ? "All Zone Members" : zoneMemberOptions.find((member) => member.id === selected)?.name ?? selected}</SelectValue></SelectTrigger>
               <SelectContent><SelectItem value="All">All Zone Members</SelectItem>{zoneMemberOptions.map((member) => <SelectItem key={member.id} value={member.id}>{member.name}</SelectItem>)}</SelectContent>
             </Select>}
           </div>
-          <div className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0" aria-label="Dashboard time range">
+          <div className="flex min-w-0 items-center gap-1 overflow-x-auto rounded-xl bg-muted/55 p-1 lg:overflow-visible" aria-label="Dashboard time range">
+            <span className="shrink-0 px-1 text-xs font-semibold text-muted-foreground">Period</span>
             {(["week", "month", "year", "custom"] as const).map((value) => (
-              <Button key={value} type="button" size="sm" variant={period === value ? "secondary" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="min-h-11 shrink-0 capitalize md:min-h-8">
+              <Button key={value} type="button" size="sm" variant={period === value ? "default" : "ghost"} onClick={() => setPeriod(value)} aria-pressed={period === value} className="min-h-11 shrink-0 capitalize md:min-h-8">
                 {value === "week" ? t("common.weekly") : value === "month" ? t("common.monthly") : value === "year" ? t("common.yearly") : t("common.custom")}
               </Button>
             ))}
           </div>
-          {period === "custom" && <div className="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-1 lg:flex lg:pl-1">
-            <Input aria-label="Dashboard start date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs md:h-9" />
-            <span className="text-xs text-muted-foreground">to</span>
-            <Input aria-label="Dashboard end date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs md:h-9" />
-          </div>}
         </div>
+        {period === "custom" && <div className="grid min-w-0 grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-border/60 px-1 pt-2 xl:basis-full">
+          <Input aria-label="Dashboard start date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs md:h-9" />
+          <span className="text-xs text-muted-foreground">to</span>
+          <Input aria-label="Dashboard end date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="h-11 min-w-0 px-2 text-xs md:h-9" />
+        </div>}
       </div>
 
-      {dashboardView === "overview" && <section className="grid min-w-0 gap-5">
-        <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">Audit Summary</h2>{metrics.usingSampleData && <Badge variant="secondary">Showing sample data</Badge>}</div>
-        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <DashboardKpi value={metrics.totalAudits} label="Total audits" tone="info" />
-          <DashboardKpi value={metrics.completedAudits} label="Completed audits" tone="success" />
-          <DashboardKpi value={metrics.draftAudits} label="Draft audits" tone="warning" />
-          <DashboardKpi value={metrics.inProgressAudits} label="In progress" tone="info" />
-          <DashboardKpi value={`${metrics.averageScore}%`} label={t("dashboard.auditScore")} tone={metrics.averageScore < 60 ? "danger" : metrics.averageScore < 80 ? "warning" : "success"} />
-        </div>
-        <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">Action Summary</h2>
-        <div className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
-          <DashboardKpi value={metrics.openActions} label="Open actions" tone="warning" />
-          <DashboardKpi value={metrics.overdueActions} label="Overdue actions" tone="danger" />
-          <DashboardKpi value={metrics.completedActions} label="Closed actions" tone="success" />
-          <DashboardKpi value={metrics.nonCompliances} label="Non-compliances" tone="danger" />
-        </div>
+      </div>{/* end desktop wrapper */}
 
-        <Card className="gap-0 overflow-hidden"><CardHeader className="border-b bg-muted/15"><CardTitle className="text-base">{t("dashboard.attentionRequired")}</CardTitle><p className="text-sm text-muted-foreground">Open Actions ranked by urgency.</p></CardHeader><CardContent className="p-0">{metrics.attention.length ? <div className="divide-y">{metrics.attention.map((action) => <button key={action.id} type="button" onClick={() => router.push(`/5s/actions/${encodeURIComponent(action.id)}`)} className="flex min-h-14 w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"><span className="min-w-0"><span className="block truncate text-sm font-semibold">{action.title}</span><span className="mt-1 block text-xs text-muted-foreground">{action.id} · {action.area} · Due {formatDashboardDate(action.dueDate)}</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant={action.priority === "Critical" || action.priority === "High" ? "danger" : "warning"}>{action.priority}</Badge><ActionStatusBadge status={action.status} /></span></button>)}</div> : <p className="p-6 text-sm text-muted-foreground">No open Actions require attention.</p>}</CardContent></Card>
-
-        <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-          <AuditScoreTrend data={metrics.auditTrend} change={metrics.trendChange} />
-          <ZonePerformanceChart data={metrics.zonePerformance} selectedZone={zoneFilter} onSelectZone={setZoneFilter} />
-          <CorrectiveActionsChart data={metrics.nonComplianceByZone} />
-          <ImprovementsTrend data={metrics.improvementTrend} />
-        </div>
-      </section>}
+      {dashboardView === "overview" && <DesktopDashboardOverview metrics={metrics} periodLabel={period === "week" ? "This Week" : period === "month" ? "This Month" : period === "year" ? "This Year" : "Custom"} selectedZone={zoneFilter} onViewActions={() => router.push("/5s/actions")} onOpenAction={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}`)} />}
 
       {dashboardView === "nc-summary" && (
-        <NCSummaryTable
-          key={zoneFilter}
-          actions={memberScopedActions}
-          memberFiltered={effectiveZoneMemberFilter !== "All"}
-          onClearMember={() => setZoneMemberFilter("All")}
-          onPreview={setPreview}
-          onOpen={(action) => {
-            setSelectedImprovementId(action.id);
-            setDashboardView("before-after");
-          }}
-          onViewAction={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}`)}
-          onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)}
-        />
+        <NCSummaryTable key={zoneFilter} actions={memberScopedActions} memberFiltered={effectiveZoneMemberFilter !== "All"} onClearMember={() => setZoneMemberFilter("All")} onPreview={setPreview} onOpen={(action) => { setSelectedImprovementId(action.id); setDashboardView("before-after"); }} onViewAction={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}`)} onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)} />
       )}
 
       {dashboardView === "before-after" && (
-        <BeforeAfterView
-          action={selectedImprovement}
-          actions={beforeAfterActions}
-          memberFiltered={effectiveZoneMemberFilter !== "All"}
-          onClearMember={() => setZoneMemberFilter("All")}
-          onSelect={setSelectedImprovementId}
-          onPreview={setPreview}
-          onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)}
-        />
+        <BeforeAfterView action={selectedImprovement} actions={beforeAfterActions} memberFiltered={effectiveZoneMemberFilter !== "All"} onClearMember={() => setZoneMemberFilter("All")} onSelect={setSelectedImprovementId} onPreview={setPreview} onReport={(action) => router.push(`/5s/actions/${encodeURIComponent(action.id)}/report`)} />
       )}
 
+      {/* ── Evidence preview dialog — all breakpoints ── */}
       <Dialog open={Boolean(preview)} onOpenChange={(open)=>!open&&setPreview(null)}><DialogContent className="!w-[calc(100vw-24px)] !max-w-5xl [&_[data-slot=dialog-close]]:size-11 md:[&_[data-slot=dialog-close]]:size-8"><DialogHeader><DialogTitle>{preview?.evidenceType === "resolution" ? "After Photo" : "Before Photo"}</DialogTitle><DialogDescription>{preview ? `${preview.name} · Uploaded by ${preview.uploadedBy} · ${formatDashboardDate(preview.uploadedAt)}` : "Evidence preview"}</DialogDescription></DialogHeader>{preview?.type === "image" && preview.url ? <img src={preview.url} alt={preview.name} className="max-h-[75vh] w-full object-contain" /> : <div className="grid min-h-52 place-items-center text-muted-foreground"><ImageIcon className="size-9" /></div>}</DialogContent></Dialog>
     </PageContainer>
   );
@@ -778,17 +776,6 @@ function DetailCell({ label, value }: { label: string; value: string }) { return
 
 function BeforeAfterPanel({ label, evidence, tone, onPreview }: { label: string; evidence?: MyActionEvidence; tone: "before" | "after"; onPreview: (evidence: MyActionEvidence) => void }) {
   return <section className="min-w-0 overflow-hidden rounded-xl border bg-muted/15"><div className={`border-b px-4 py-2.5 text-center text-xs font-bold uppercase tracking-wider ${tone === "before" ? "bg-red-500/10 text-red-700 dark:text-red-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>{label}</div>{evidence?.url ? <button type="button" onClick={() => onPreview(evidence)} className="block aspect-[16/10] w-full overflow-hidden bg-muted"><img src={evidence.url} alt={evidence.name} className="size-full object-contain" /></button> : <div className="grid aspect-[16/10] place-items-center text-sm text-muted-foreground"><div className="text-center"><ImageIcon className="mx-auto mb-2 size-7" />No image attached</div></div>}</section>;
-}
-
-function DashboardKpi({ value, label, detail, tone = "neutral" }: { value: string | number; label: string; detail?: string; tone?: "neutral" | "danger" | "warning" | "success" | "info" }) {
-  const tones = {
-    neutral: "text-foreground",
-    danger: "text-red-600 dark:text-red-400",
-    warning: "text-amber-600 dark:text-amber-400",
-    success: "text-emerald-600 dark:text-emerald-400",
-    info: "text-primary",
-  };
-  return <Card className="min-w-0 gap-0"><CardContent className="flex min-h-28 flex-col items-center justify-center p-4 text-center xl:min-h-0 xl:flex-1"><p className={`max-w-full break-words text-2xl font-bold tracking-tight ${tones[tone]}`}>{value}</p><p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p>{detail && <p className="mt-1 text-[10px] text-muted-foreground">{detail}</p>}</CardContent></Card>;
 }
 
 function DashboardFilter({ value, onChange, label, options }: { value: string; onChange: (value: string) => void; label: string; options: string[] }) { return <Select value={value} onValueChange={(next)=>onChange(next ?? "All")}><SelectTrigger className="h-11 w-full min-w-0 md:h-9 lg:min-w-36"><SelectValue>{(selected: string | null) => selected === "All" || selected == null ? label : selected}</SelectValue></SelectTrigger><SelectContent><SelectItem value="All">{label}</SelectItem>{options.map((option)=><SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select>; }

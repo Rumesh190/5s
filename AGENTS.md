@@ -170,6 +170,8 @@ Use stable IDs where available; names are display values and legacy fallbacks.
 - Match members by `responsiblePersonId`, then legacy name fallback.
 - NC export applies dashboard filters and explicit record selection; export only selected IDs.
 - Some headline/trend presentation uses `MVP_DASHBOARD_DATA`; record tables use live stores.
+- The `/5s` Dashboard has a purpose-built mobile presentation (`MobileDashboard`) rendered at `< md` (768 px) alongside the preserved desktop experience at `>= md`.
+- Mobile and desktop Dashboard presentations must consume the same canonical domain data, filters, permissions, and calculations. Do not duplicate business state for mobile.
 
 ## 15. Reports
 

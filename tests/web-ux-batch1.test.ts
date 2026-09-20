@@ -24,7 +24,7 @@ describe("web UX/UI batch 1", () => {
   it("ties dashboard sample disclosure to the actual fixture-selection condition", () => {
     const source = read("features/five-s/dashboard-page.tsx");
     expect(source).toContain("usingSampleData: useMvpDemo");
-    expect(source).toContain('metrics.usingSampleData && <Badge variant="secondary">Showing sample data</Badge>');
+    expect(read("features/five-s/components/DesktopDashboardOverview.tsx")).toContain('metrics.usingSampleData && <Badge variant="secondary">Showing sample data</Badge>');
   });
 
   it("provides zone restriction, question state, and verification guidance", () => {
