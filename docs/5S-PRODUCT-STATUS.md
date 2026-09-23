@@ -15,7 +15,7 @@ Its current maturity is best described as a **functional frontend workflow proto
 - A user can sign in with the fixed demo credential, create and execute an audit, score all five 5S sections, capture finding evidence, create corrective actions, switch demo identities, assign and execute actions, submit them for auditor review, send them back or close them, complete the audit after its actions are closed and a signature is captured, and open printable audit/action reports.
 - Audits, actions, evidence encoded as data URLs, administration records, notifications, improvements, red tags, demo role, authentication flag, theme, language, accent, and navigation preference are persisted in that browser's `localStorage`.
 - Seed audits, actions, users, notifications, charts, reference images, improvements, and red tags are demo fixtures. The default monthly Dashboard deliberately substitutes a fixed presentation dataset for several KPIs and charts; other filter selections derive values from the local stores.
-- There are no route handlers, server actions, API calls, database client, database schema in executable code, server-side authentication, object/file storage, or backend authorization. “Authentication” is a local boolean session created by the hard-coded `admin / admin` credential.
+- There are no route handlers, server actions, API calls, database client, database schema in executable code, server-side authentication, object/file storage, or backend authorization. “Authentication” is a runtime-only frontend session created by a temporary hard-coded credential.
 - Role-aware frontend rules exist for important workflows, but they are browser logic over mutable local data and are not a security boundary.
 - The product is not production-ready because it has no shared source of truth, tenant isolation, secure identity/session management, server authorization, durable relational persistence, file storage, audit trail guarantees, server validation, concurrency handling, delivery integrations, or production observability. A browser clear, another browser/device, or a user editing storage can change or lose the entire operational state.
 
@@ -82,7 +82,7 @@ Status meanings are applied at the capability level: **Implemented** means the b
 | Export | Partially Implemented | Filtered local action data | Download/print output only | Non-compliance CSV export and browser print/PDF flows work. There is no general Excel/PDF generation service, scheduled export, or server report archive. |
 | Profile | UI Only | Current demo user | None | `/profile` is explicitly a coming-soon panel; no profile or password editing exists. |
 | Preferences | Implemented | User selections | localStorage | Top/left navigation, six accents, five languages, and theme are device-local. Translation coverage is mixed because many strings remain literal English. |
-| Authentication | Mock Data | Fixed `admin / admin` check | localStorage flag | Functional demo gate/logout, but no user-bound credential, hashing, session, recovery, MFA, identity provider, or server verification. |
+| Authentication | Mock Data | Temporary frontend credential check | runtime-only in-memory session | Functional demo gate/logout, but no user-bound credential, hashing, recovery, MFA, identity provider, or server verification. |
 | Backend | Not Implemented | None | None | No APIs, server actions, database calls, or file service. |
 | User Administration | Partially Implemented | Generated fixture users | localStorage | Add/edit/activate, roles, zone membership, and permission selection work locally. Role records are embedded presets, not separately managed. |
 | Notifications | Partially Implemented | Local workflow events + fixtures | localStorage | In-app recipient feeds and read state work on one browser. No push, email, jobs, cross-device delivery, or due-date scheduler. |
@@ -566,7 +566,7 @@ Product: Standalone browser-based 5S audit, corrective-action, improvement, red-
 Current stage: Functional frontend MVP / workflow prototype; suitable for requirements validation and controlled demos, not shared production use.  
 Frontend: Substantial Next.js/React implementation with responsive role-aware workflows.  
 Backend: None.  
-Authentication: Fixed `admin / admin` local demo gate.  
+Authentication: Temporary frontend-only local demo gate.
 Persistence: Browser localStorage, including base64 evidence and signatures.  
 Multi-tenancy: Missing organization layer; plant/zone/user identifiers are partial string/demo concepts only.  
 Audit workflow: End-to-end locally implemented, with scoring/template and In Progress inconsistencies.  

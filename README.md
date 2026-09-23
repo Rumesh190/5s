@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The demo login is `admin` / `admin`; the user menu provides demo-role switching for workflow walkthroughs.
+Open [http://localhost:3000](http://localhost:3000). Use the temporary MVP login supplied for the demo; the user menu provides demo-role switching for workflow walkthroughs.
 
 ## Quality checks
 

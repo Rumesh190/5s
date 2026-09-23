@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { validateMvpCredentials } from "@/lib/auth/mvp-credentials";
 import { getSessionActivityState, hiddenSessionHasExpired } from "@/lib/auth/session-policy";
 
 const AUTH_KEY = "5s-auth-session";
@@ -43,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = React.useCallback(async (username: string, password: string) => {
     await new Promise((resolve) => window.setTimeout(resolve, 280));
-    if (username !== "admin" || password !== "admin") return false;
+    if (!validateMvpCredentials(username, password)) return false;
     lastActivityAtRef.current = Date.now();
     hiddenAtRef.current = null;
     warningOpenRef.current = false;

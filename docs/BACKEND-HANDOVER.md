@@ -5,7 +5,7 @@
 The 5S frontend MVP is complete. It is a Next.js application whose operational workflows currently run in the browser:
 
 - Domain data comes from fixtures, module-level in-memory stores, and `localStorage`.
-- Authentication is demo-only (`admin` / `admin`) and persona selection is client-side.
+- Authentication is demo-only with a temporary frontend credential, and persona selection is client-side.
 - Uploaded evidence is currently represented by compressed base64 data URLs; demo and reference images use public asset paths.
 - Audit, Action, Continuous Improvement, and Red Tag reports are rendered client-side and printed or saved through the browser.
 - Vitest characterization tests protect the current template, scoring, lifecycle, permission, route, date, branding, and workflow behavior. Use the current test output rather than a hard-coded count.
