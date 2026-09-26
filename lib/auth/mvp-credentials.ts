@@ -1,5 +1,5 @@
 const MVP_USERNAME = "admin";
-const MVP_PASSWORD = "unicorn";
+const MVP_PASSWORD = "whitepanda";
 
 /** Temporary frontend-only credential check; replace with backend authentication. */
 export function validateMvpCredentials(username: string, password: string) {

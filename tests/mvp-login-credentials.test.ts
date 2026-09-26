@@ -6,7 +6,7 @@ import { validateMvpCredentials } from "@/lib/auth/mvp-credentials";
 
 describe("temporary MVP login credentials", () => {
   it("accepts the configured Admin login", () => {
-    expect(validateMvpCredentials("admin", "unicorn")).toBe(true);
+    expect(validateMvpCredentials("admin", "whitepanda")).toBe(true);
   });
 
   it("rejects the previous password", () => {
@@ -14,12 +14,12 @@ describe("temporary MVP login credentials", () => {
   });
 
   it("rejects the correct password for a different username", () => {
-    expect(validateMvpCredentials("wrong-user", "unicorn")).toBe(false);
+    expect(validateMvpCredentials("wrong-user", "whitepanda")).toBe(false);
   });
 
   it("does not disclose credentials on the Login screen", () => {
     const loginScreen = fs.readFileSync(path.join(process.cwd(), "components/auth/login-screen.tsx"), "utf8");
     expect(loginScreen).not.toContain("admin / admin");
-    expect(loginScreen).not.toContain("unicorn");
+    expect(loginScreen).not.toContain("whitepanda");
   });
 });
